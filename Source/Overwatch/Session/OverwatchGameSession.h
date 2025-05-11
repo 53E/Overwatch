@@ -1,0 +1,46 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/GameSession.h"
+#include "OverwatchGameSession.generated.h"
+
+/**
+ * 오버워치 게임 세션 클래스
+ * 서버 세션 관리 및 플레이어 접속 처리
+ */
+UCLASS()
+class OVERWATCH_API AOverwatchGameSession : public AGameSession
+{
+	GENERATED_BODY()
+	
+public:
+	AOverwatchGameSession();
+
+	// 세션 관리 함수들
+	virtual void RegisterServer() override;
+	virtual void InitOptions(const FString& Options) override;
+	virtual void OnStartSessionComplete(FName SessionName, bool bWasSuccessful) override;
+	virtual void OnEndSessionComplete(FName SessionName, bool bWasSuccessful) override;
+	
+	// 플레이어 관련 함수들
+	virtual void PostLogin(APlayerController* NewPlayer) override;
+	
+	// 관전자 허용 여부 함수
+	virtual bool AllowSpectating();
+	
+protected:
+	// 서버 설정 변수들
+	UPROPERTY(Config)
+	FString ServerName;
+	
+	UPROPERTY(Config)
+	bool bIsLANServer;
+	
+	UPROPERTY(Config)
+	bool bIsDedicatedServer;
+	
+	// MaxPlayers는 이미 부모 클래스에 정의되어 있으므로 제거
+	// 대신 기본 MaxPlayers 값 
+	UPROPERTY()
+	int32 DefaultMaxPlayers;
+};

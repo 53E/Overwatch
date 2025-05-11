@@ -1,17 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "../OverwatchCharacter.h"
 #include "InputActionValue.h"
 #include "CassidyCharacter.generated.h"
 
-class USkeletalMeshComponent;
-class UCameraComponent;
-class UInputComponent;
 class UAnimMontage;
 class USoundBase;
 class UParticleSystem;
-class UInputMappingContext;
 class UInputAction;
 
 /**
@@ -19,7 +15,7 @@ class UInputAction;
  * 오버워치 스타일의 1인칭 캐릭터
  */
 UCLASS()
-class OVERWATCH_API ACassidyCharacter : public ACharacter
+class OVERWATCH_API ACassidyCharacter : public AOverwatchCharacter
 {
 	GENERATED_BODY()
 
@@ -29,16 +25,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
-	/** 1인칭 카메라 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
-	UCameraComponent* FirstPersonCamera;
-
-	/** 1인칭 메시 (총) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
-	USkeletalMeshComponent* FPGunMesh;
-
 	/** 총 발사 몽타주 */
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
 	UAnimMontage* FireAnimation;
@@ -55,6 +44,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	USoundBase* ReloadSound;
 
+	/** 구르기 소리 */
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	USoundBase* DodgeSound;
 
@@ -71,18 +61,19 @@ protected:
 	int32 MaxAmmo;
 
 	/** 현재 탄창 수 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	int32 CurrentAmmo;
 
 	/** 재장전 중인지 여부 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsReloading;
 
 	/** 팬 파이어 중인지 여부 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
 	bool bIsFanFiring;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Weapon")
+	/** 구르기 중인지 여부 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool bIsDodging;
 
 	/** 총격 간 딜레이 */
@@ -109,31 +100,16 @@ protected:
 	float WeaponRange;
 
 	/** 팬 파이어 최대 발산 각도 */
-	UPROPERTY(EditDefaultsOnly,BlueprintReadWrite, Category = "Weapon")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Weapon")
 	float FanFireMaxSpreadAngle;
 
-	//반동
-	UPROPERTY(EditAnywhere , BlueprintReadWrite,Category = "Recoil")
+	/** 반동 비율 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recoil")
 	float RecoilRate;
 	
+	/** 팬 파이어 반동 비율 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recoil")
 	float FanFireRecoilRate;
-
-	/** Enhanced Input 매핑 컨텍스트 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	UInputMappingContext* DefaultMappingContext;
-
-	/** 이동 입력 액션 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	UInputAction* MoveAction;
-
-	/** 시점 이동 입력 액션 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	UInputAction* LookAction;
-
-	/** 점프 입력 액션 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
-	UInputAction* JumpAction;
 
 	/** 발사 입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -147,6 +123,7 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* ReloadAction;
 
+	/** 구르기 입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* DodgeAction;
 
@@ -163,68 +140,113 @@ protected:
 	float FlashbangCooldown;
 
 	/** 섬광탄 쿨타임 상태 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool bFlashbangOnCooldown;
 
 	/** 섬광탄 폭발 범위 */
 	UPROPERTY(EditDefaultsOnly, Category = "Ability")
 	float FlashbangRadius;
 
+	/** 구르기 속도 */
 	UPROPERTY(EditDefaultsOnly, Category = "Ability")
 	float DodgeSpeed;
 
+	/** 구르기 쿨타임 */
 	UPROPERTY(EditDefaultsOnly, Category = "Ability")
 	float DodgeCooldown;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
+	/** 구르기 쿨타임 상태 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool bDodgingOnCooldown;
 
-	// 입력 액션에 추가:
 	/** 섬광탄 입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* FlashbangAction;
 
-	// 함수 선언 추가:
-	void ThrowFlashbang(const FInputActionValue& Value);
-	void Flashbang();
-
-	// 타이머 핸들 및 완료 함수:
-	FTimerHandle TimerHandle_FlashbangCooldown;
-
-	FVector FlashbangLocation;
-
-	UFUNCTION()
-	void FinishFlashbangCooldown();
-
-	UFUNCTION()
-	void Dodge();
-
-	UFUNCTION()
-	void FinishDodge();
-
-
 protected:
-	// Enhanced Input 입력 처리 함수
-	void Move(const FInputActionValue& Value);
-	void Look(const FInputActionValue& Value);
+	// 액션 입력 처리 함수
 	void StartFire(const FInputActionValue& Value);
 	void StopFire(const FInputActionValue& Value);
 	void FanFire(const FInputActionValue& Value);
 	void StartReload(const FInputActionValue& Value);
-
+	void ThrowFlashbang(const FInputActionValue& Value);
+	void Dodge(const FInputActionValue& Value);
 
 	// 실제 총 발사 로직
 	void FireWeapon();
 	void FireBullet(bool bIsFanFireShot = false);
 	
-	// 재장전 완료
+	// 서버 RPC 구현
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerFireBullet(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot);
+	bool ServerFireBullet_Validate(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot);
+	void ServerFireBullet_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot);
+	
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerStartReload();
+	bool ServerStartReload_Validate();
+	void ServerStartReload_Implementation();
+	
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerThrowFlashbang(const FVector_NetQuantize& Location);
+	bool ServerThrowFlashbang_Validate(const FVector_NetQuantize& Location);
+	void ServerThrowFlashbang_Implementation(const FVector_NetQuantize& Location);
+	
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerDodge();
+	bool ServerDodge_Validate();
+	void ServerDodge_Implementation();
+	
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerFanFire();
+	bool ServerFanFire_Validate();
+	void ServerFanFire_Implementation();
+	
+	// 멀티캐스트 RPC 구현 (효과 동기화)
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayFireEffects(bool bIsFanFireShot);
+	void MulticastPlayFireEffects_Implementation(bool bIsFanFireShot);
+	
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayReloadEffects();
+	void MulticastPlayReloadEffects_Implementation();
+	
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayFlashbangEffects(const FVector_NetQuantize& Location);
+	void MulticastPlayFlashbangEffects_Implementation(const FVector_NetQuantize& Location);
+	
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayDodgeEffects();
+	void MulticastPlayDodgeEffects_Implementation();
+	
+	// 구르기 종료 효과를 위한 멀티캐스트 RPC 추가
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayDodgeResetEffects();
+	void MulticastPlayDodgeResetEffects_Implementation();
+	
+	// 히트 처리
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerProcessHit(AActor* HitActor, const FVector_NetQuantize& HitLocation);
+	bool ServerProcessHit_Validate(AActor* HitActor, const FVector_NetQuantize& HitLocation);
+	void ServerProcessHit_Implementation(AActor* HitActor, const FVector_NetQuantize& HitLocation);
+
+	void Flashbang();
+	
+	// 타이머 콜백 함수
 	UFUNCTION()
 	void FinishReload();
 	
+	UFUNCTION()
+	void FinishDodge();
+	
+	UFUNCTION()
+	void FinishFlashbangCooldown();
+
+	// 블루프린트 구현 이벤트
 	UFUNCTION(BlueprintImplementableEvent, Category = "Dodge")
 	void DownCameraOnDodge();
 
-	UFUNCTION(BlueprintImplementableEvent , Category = "Camera")
+	UFUNCTION(BlueprintImplementableEvent, Category = "Camera")
 	void Recoil(bool bIsFanFire);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
@@ -236,8 +258,8 @@ protected:
 private:
 	// 타이머 핸들
 	FTimerHandle TimerHandle_Reload;
-
-	float MaxWalkSpeed;
-
-
+	FTimerHandle TimerHandle_FlashbangCooldown;
+	
+	// 섬광탄 위치
+	FVector FlashbangLocation;
 };

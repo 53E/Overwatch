@@ -14,53 +14,74 @@
 #include "EnhancedInputSubsystems.h"
 // 무작위 값 생성을 위한 헤더
 #include "Math/UnrealMathUtility.h"
+// 네트워크 관련 헤더
+#include "Net/UnrealNetwork.h"
+
 
 // 생성자
 ACassidyCharacter::ACassidyCharacter()
 {
 	// 매 프레임 Tick() 호출 설정
 	PrimaryActorTick.bCanEverTick = true;
+    
+    // 네트워크 복제 활성화
+    bReplicates = true;
+    SetReplicates(true);
+    SetReplicateMovement(true);
 
-	// 카메라 컴포넌트 생성
-	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
-	FirstPersonCamera->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f)); // 눈 높이 위치
-	FirstPersonCamera->bUsePawnControlRotation = true;
-
-	// 1인칭 메시 컴포넌트 생성 (총)
-	FPGunMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FPGun"));
-	FPGunMesh->SetOnlyOwnerSee(true); // 소유자만 볼 수 있음
-	FPGunMesh->SetupAttachment(FirstPersonCamera);
-	FPGunMesh->CastShadow = false;
-	FPGunMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
-	FPGunMesh->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-	// 변수 초기화
-	MaxWalkSpeed = 600;
-	DodgeSpeed = 2100;
-	MaxAmmo = 6; // 캐서디는 6발 리볼버
+	// 캐서디 특성에 맞게 기본 스탯 설정
+	MaxHealth = 225.0f;  // 캐서디의 체력
+	Armor = 0.0f;        // 아머 없음
+	MaxShield = 0.0f;    // 쉴드 없음
+	ShieldRegenRate = 0.0f;
+	
+	// 무기 및 능력 변수 초기화
+	MaxAmmo = 6;           // 캐서디는 6발 리볼버
 	CurrentAmmo = MaxAmmo;
 	bIsReloading = false;
 	bIsFanFiring = false;
 	bIsDodging = false;
-	FireRate = 0.5f; 
-	FanFireRate = 0.15f; // 연사 발사 속도
+	FireRate = 0.5f;      // 0.5초마다 발사 가능
+	FanFireRate = 0.15f;  // 연사 발사 속도
 	LastFireTime = 0.0f;
-	ReloadTime = 1.5f; // 재장전 시간 1.5초
+	ReloadTime = 1.5f;    // 재장전 시간 1.5초
 	WeaponDamage = 70.0f; // 기본 데미지
 	WeaponRange = 5000.0f; // 사거리
 	FanFireMaxSpreadAngle = 7.5f; // 팬 파이어 최대 발산 각도 (도 단위)
 
+	// 반동 설정
 	RecoilRate = 1.15f;
 	FanFireRecoilRate = 1.75f;
 
+	// 능력 쿨타임 설정
+	DodgeSpeed = 2100.0f;
 	DodgeCooldown = 2.0f;
-
 	FlashbangCooldown = 2.0f;
 	bFlashbangOnCooldown = false;
 	bDodgingOnCooldown = false;
-	FlashbangRadius = 130.0f; // 폭발 범위 
+	FlashbangRadius = 130.0f; // 폭발 범위
+	
+	// 무기 메시 설정 - 부모 클래스의 FPWeaponMesh를 사용
+	FPWeaponMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
+	FPWeaponMesh->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+    
+    // 3인칭 메시 설정
+    TPWeaponMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
+    TPWeaponMesh->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+}
 
+// 복제할 변수 등록
+void ACassidyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    
+    // 복제할 변수들 등록
+    DOREPLIFETIME(ACassidyCharacter, CurrentAmmo);
+    DOREPLIFETIME(ACassidyCharacter, bIsReloading);
+    DOREPLIFETIME(ACassidyCharacter, bIsFanFiring);
+    DOREPLIFETIME(ACassidyCharacter, bIsDodging);
+    DOREPLIFETIME(ACassidyCharacter, bFlashbangOnCooldown);
+    DOREPLIFETIME(ACassidyCharacter, bDodgingOnCooldown);
 }
 
 // 게임 시작시 호출
@@ -70,16 +91,6 @@ void ACassidyCharacter::BeginPlay()
 	
 	// 초기 탄창 설정
 	CurrentAmmo = MaxAmmo;
-
-	// Enhanced Input 매핑 컨텍스트 추가
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			//Subsystem->ClearMappingContext(DefaultMappingContext);
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
 }
 
 // 매 프레임 호출
@@ -91,86 +102,35 @@ void ACassidyCharacter::Tick(float DeltaTime)
 // 입력 바인딩
 void ACassidyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
+	// 부모 클래스의 입력 바인딩을 먼저 호출 (이동, 점프 등)
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+    // 로컬 플레이어만 입력 처리
+    if (!IsLocallyControlled())
+        return;
+
+	// Enhanced Input Component로 캐스팅
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 	
 	if (EnhancedInputComponent)
 	{
-		// 이동 입력 바인딩
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::Move);
-		
-		// 시점 이동 입력 바인딩
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::Look);
-		
-		// 점프 입력 바인딩
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		
-		// 발사 입력 바인딩
+		// 캐서디 특화 입력 바인딩
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::StartFire);
 		EnhancedInputComponent->BindAction(FireAction, ETriggerEvent::Completed, this, &ACassidyCharacter::StopFire);
-		
-		// 연사 입력 바인딩
 		EnhancedInputComponent->BindAction(FanFireAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::FanFire);
-		
-		// 재장전 입력 바인딩
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::StartReload);
-		// 섬광탄 입력 바인딩
 		EnhancedInputComponent->BindAction(FlashbangAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::ThrowFlashbang);
-
 		EnhancedInputComponent->BindAction(DodgeAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::Dodge);
-	}
-}
-
-// 이동 입력 처리 (Enhanced Input)
-void ACassidyCharacter::Move(const FInputActionValue& Value)
-{
-	// 2D 벡터 입력값 가져오기
-	FVector2D MovementVector = Value.Get<FVector2D>();
-	
-	if (Controller != nullptr)
-	{
-		// 전방/후방 이동
-		if (MovementVector.Y != 0.0f)
-		{
-			AddMovementInput(GetActorForwardVector(), MovementVector.Y);
-		}
-		
-		// 좌/우 이동
-		if (MovementVector.X != 0.0f)
-		{
-			AddMovementInput(GetActorRightVector(), MovementVector.X);
-		}
-	}
-}
-
-// 시점 이동 입력 처리 (Enhanced Input)
-void ACassidyCharacter::Look(const FInputActionValue& Value)
-{
-	// 2D 벡터 입력값 가져오기
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-	
-	if (Controller != nullptr)
-	{
-		// 좌우 시점 이동
-		if (LookAxisVector.X != 0.0f)
-		{
-			AddControllerYawInput(LookAxisVector.X);
-		}
-		
-		// 상하 시점 이동
-		if (LookAxisVector.Y != 0.0f)
-		{
-			AddControllerPitchInput(LookAxisVector.Y);
-		}
 	}
 }
 
 // 발사 시작 (Enhanced Input)
 void ACassidyCharacter::StartFire(const FInputActionValue& Value)
 {
-	FireWeapon();
+	if (!IsDead())
+	{
+		FireWeapon();
+	}
 }
 
 // 발사 중단 (Enhanced Input)
@@ -182,16 +142,26 @@ void ACassidyCharacter::StopFire(const FInputActionValue& Value)
 // 우클릭 연사 (Enhanced Input)
 void ACassidyCharacter::FanFire(const FInputActionValue& Value)
 {
-	// 재장전 중이거나 총알이 없으면 발사 불가
-	if (bIsReloading || CurrentAmmo <= 0 || bIsFanFiring || bIsDodging)
+	// 사망, 재장전 중, 탄약 부족, 팬 파이어 중, 구르기 중이면 발사 불가
+	if (IsDead() || bIsReloading || CurrentAmmo <= 0 || bIsFanFiring || bIsDodging)
 	{
 		return;
 	}
 
+    // 서버 RPC 호출
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        ServerFanFire();
+    }
+    
+    // 클라이언트와 서버 모두에서 실행
 	bIsFanFiring = true;
 
-	// 원 애니메이션 bp에서 구현
-	FanFireUI((CurrentAmmo + 5) * FanFireRate);
+	// UI 업데이트 (블루프린트에서 구현)
+    if (IsLocallyControlled())
+    {
+	    FanFireUI((CurrentAmmo + 5) * FanFireRate);
+    }
 	
 	// 남은 총알만큼 연사
 	int32 bulletsToFire = CurrentAmmo;
@@ -227,33 +197,41 @@ void ACassidyCharacter::FanFire(const FInputActionValue& Value)
 	);
 }
 
+// 서버에서 FanFire 실행
+bool ACassidyCharacter::ServerFanFire_Validate()
+{
+    return true;
+}
+
+void ACassidyCharacter::ServerFanFire_Implementation()
+{
+    if (!IsDead() && !bIsReloading && CurrentAmmo > 0 && !bIsFanFiring && !bIsDodging)
+    {
+        FanFire(FInputActionValue());
+    }
+}
+
 // 재장전 시작 (Enhanced Input)
 void ACassidyCharacter::StartReload(const FInputActionValue& Value)
 {
-
-	if (CurrentAmmo == MaxAmmo || bIsReloading || bIsFanFiring)
+	// 사망, 최대 탄약, 재장전 중, 팬 파이어 중이면 리턴
+	if (IsDead() || CurrentAmmo == MaxAmmo || bIsReloading || bIsFanFiring)
 	{
 		return;
 	}
 
+    // 서버 RPC 호출
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        ServerStartReload();
+        return;
+    }
+
 	bIsReloading = true;
 	UE_LOG(LogTemp, Log, TEXT("장전 시작"));
 
-	// 재장전 애니메이션 재생
-	if (ReloadAnimation)
-	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance)
-		{
-			AnimInstance->Montage_Play(ReloadAnimation, 1.0f);
-		}
-	}
-
-	// 재장전 사운드 재생
-	if (ReloadSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, ReloadSound, GetActorLocation());
-	}
+    // 모든 클라이언트에 효과 전파
+    MulticastPlayReloadEffects();
 
 	// 재장전 타이머 설정
 	GetWorld()->GetTimerManager().SetTimer(
@@ -263,6 +241,40 @@ void ACassidyCharacter::StartReload(const FInputActionValue& Value)
 		ReloadTime, 
 		false
 	);
+}
+
+// 서버에서 재장전 실행
+bool ACassidyCharacter::ServerStartReload_Validate()
+{
+    return true;
+}
+
+void ACassidyCharacter::ServerStartReload_Implementation()
+{
+    if (!IsDead() && CurrentAmmo < MaxAmmo && !bIsReloading && !bIsFanFiring)
+    {
+        StartReload(FInputActionValue());
+    }
+}
+
+// 모든 클라이언트에 재장전 효과 전파
+void ACassidyCharacter::MulticastPlayReloadEffects_Implementation()
+{
+    // 재장전 애니메이션 재생
+    if (ReloadAnimation)
+    {
+        UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+        if (AnimInstance)
+        {
+            AnimInstance->Montage_Play(ReloadAnimation, 1.0f);
+        }
+    }
+
+    // 재장전 사운드 재생
+    if (ReloadSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, ReloadSound, GetActorLocation());
+    }
 }
 
 // 재장전 완료
@@ -276,8 +288,8 @@ void ACassidyCharacter::FinishReload()
 // 무기 발사 처리
 void ACassidyCharacter::FireWeapon()
 {
-	// 팬 파이어 중이거나 재장전 중이거나 총알이 없으면 발사 불가
-	if (bIsFanFiring || bIsReloading || CurrentAmmo <= 0)
+	// 사망, 팬 파이어 중, 재장전 중, 총알 부족이면 발사 불가
+	if (IsDead() || bIsFanFiring || bIsReloading || CurrentAmmo <= 0)
 	{
 		// 총알이 없고 재장전 중이 아니면 자동 재장전
 		if (CurrentAmmo <= 0 && !bIsReloading && !bIsFanFiring)
@@ -303,48 +315,56 @@ void ACassidyCharacter::FireWeapon()
 // 총알 발사 로직
 void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
 {
+
+        
+    // 로컬에서 처리할 경우
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        // 카메라 정보 가져오기
+        FVector CameraLocation;
+        FRotator CameraRotation;
+        GetActorEyesViewPoint(CameraLocation, CameraRotation);
+        
+        // 팬 파이어의 경우 랜덤 각도 적용
+        if (bIsFanFireShot)
+        {
+            // 랜덤 편차 계산
+            float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+            float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+            
+            // 원래 회전에 랜덤 편차 추가
+            CameraRotation.Pitch += PitchSpread;
+            CameraRotation.Yaw += YawSpread;
+        }
+        
+        // 서버에 RPC 호출
+        ServerFireBullet(CameraLocation, CameraRotation.Vector(), bIsFanFireShot);
+        
+        // 로컬 클라이언트에서도 반동 효과 추가 (이 부분을 추가)
+        if (IsLocallyControlled())
+        {
+            Recoil(bIsFanFireShot);
+        }
+        
+        return;
+    }
+
 	// 총알 소모
 	CurrentAmmo--;
 
-	Recoil(bIsFanFireShot);
+    // 효과 재생 (모든 클라이언트에 전파)
+    MulticastPlayFireEffects(bIsFanFireShot);
+    UE_LOG(LogTemp, Log, TEXT("반동!! 01"));
+	// 반동 효과 (로컬 클라이언트에서만)
+    if (IsLocallyControlled())
+    {
+	    Recoil(bIsFanFireShot);
+        UE_LOG(LogTemp, Log, TEXT("반동!! 02"));
+    }
 
 	UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
 
-	// 발사 애니메이션 재생
-	if (FireAnimation)
-	{
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance)
-		{
-			AnimInstance->Montage_Play(FireAnimation, 1.0f);
-		}
-	}
-
-	// 발사 사운드 재생
-	if (FireSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
-	}
-
-	// 총구 이펙트 재생
-	if (MuzzleFlash)
-	{
-		const FVector MuzzleLocation = FPGunMesh->GetSocketLocation(FName("MuzzleSocket"));
-		const FRotator MuzzleRotation = FPGunMesh->GetSocketRotation(FName("MuzzleSocket"));
-		
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, MuzzleLocation, MuzzleRotation);
-	}
-
-	// 탄피 이펙트 재생
-	if (ShellEject)
-	{
-		const FVector EjectLocation = FPGunMesh->GetSocketLocation(FName("ShellEjectSocket"));
-		const FRotator EjectRotation = FPGunMesh->GetSocketRotation(FName("ShellEjectSocket"));
-		
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ShellEject, EjectLocation, EjectRotation);
-	}
-
-	// 라인 트레이스 (히트스캔)를 통한 명중 판정
+	// 카메라 정보 가져오기
 	FVector CameraLocation;
 	FRotator CameraRotation;
 	GetActorEyesViewPoint(CameraLocation, CameraRotation);
@@ -388,35 +408,168 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
 	DrawDebugLine(GetWorld(), TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 1.0f, 0, 1.0f);
 	#endif
 
-	// 명중 시 데미지 처리
-	if (bHit)
+	// 명중 시 데미지 처리 (서버에서만 수행)
+	if (bHit && GetLocalRole() == ROLE_Authority)
 	{
 		AActor* HitActor = HitResult.GetActor();
 		if (HitActor)
 		{
-			
-			// 명중 이펙트 (선택적)
-			// UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HitEffect, HitResult.ImpactPoint, HitResult.ImpactNormal.Rotation());
+			// 데미지 적용 - Hit 함수 호출
+            ServerProcessHit(HitActor, HitResult.ImpactPoint);
 		}
 	}
 
-
-	if (CurrentAmmo <= 0)
+	// 총알을 모두 소모했고 팬 파이어가 아니면 자동 재장전
+	if (CurrentAmmo <= 0 && !bIsFanFiring)
 	{
-
 		StartReload(FInputActionValue());
 	}
-	
 }
 
+// 서버에서 총알 발사 처리
+bool ACassidyCharacter::ServerFireBullet_Validate(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot)
+{
+    return true;
+}
 
+void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot)
+{
+
+    
+    // 사망, 팬 파이어 중, 재장전 중, 총알 부족이면 발사 불가
+    if (IsDead() || (bIsFanFireShot == false && bIsFanFiring) || bIsReloading || CurrentAmmo <= 0)
+    {
+        return;
+    }
+    
+    // 총알 소모
+    CurrentAmmo--;
+    
+    // 효과 재생 (모든 클라이언트에 전파)
+    MulticastPlayFireEffects(bIsFanFireShot);
+    
+    // 트레이스 엔드 포인트 계산
+    FVector TraceEnd = StartLocation + (Direction * WeaponRange);
+    
+    // 충돌 쿼리 파라미터 설정
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+    QueryParams.bTraceComplex = true;
+    
+    // 명중 결과
+    FHitResult HitResult;
+    
+    // 라인 트레이스 실행
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        StartLocation,
+        TraceEnd,
+        ECC_Visibility,
+        QueryParams
+    );
+    
+    // 명중 시 데미지 처리
+    if (bHit)
+    {
+        AActor* HitActor = HitResult.GetActor();
+        if (HitActor)
+        {
+            // 데미지 적용 - Hit 함수 호출
+            ServerProcessHit(HitActor, HitResult.ImpactPoint);
+        }
+    }
+    
+    // 총알을 모두 소모했고 팬 파이어가 아니면 자동 재장전
+    if (CurrentAmmo <= 0 && !bIsFanFiring)
+    {
+        StartReload(FInputActionValue());
+    }
+}
+
+// 서버에서 히트 처리
+bool ACassidyCharacter::ServerProcessHit_Validate(AActor* HitActor, const FVector_NetQuantize& HitLocation)
+{
+    return true;
+}
+
+void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const FVector_NetQuantize& HitLocation)
+{
+    if (HitActor && !IsDead() && GetLocalRole() == ROLE_Authority)
+    {
+        // hit 함수를 사용하도록 수정된 코드
+        AOverwatchCharacter* OverwatchCharacter = Cast<AOverwatchCharacter>(HitActor);
+        if (OverwatchCharacter)
+        {
+            OverwatchCharacter->Hit(WeaponDamage, this);
+        }
+    }
+}
+
+// 모든 클라이언트에 총알 발사 효과 전파
+void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireShot)
+{
+    // 발사 애니메이션 재생
+    if (FireAnimation)
+    {
+        UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+        if (AnimInstance)
+        {
+            AnimInstance->Montage_Play(FireAnimation, 1.0f);
+        }
+    }
+
+    // 발사 사운드 재생
+    if (FireSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
+    }
+
+    // 총구 이펙트 재생
+    if (MuzzleFlash)
+    {
+        const FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
+        const FRotator MuzzleRotation = FPWeaponMesh->GetSocketRotation(FName("MuzzleSocket"));
+        
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, MuzzleLocation, MuzzleRotation);
+    }
+
+    // 탄피 이펙트 재생
+    if (ShellEject)
+    {
+        const FVector EjectLocation = FPWeaponMesh->GetSocketLocation(FName("ShellEjectSocket"));
+        const FRotator EjectRotation = FPWeaponMesh->GetSocketRotation(FName("ShellEjectSocket"));
+        
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ShellEject, EjectLocation, EjectRotation);
+    }
+}
+
+// 섬광탄 던지기
 void ACassidyCharacter::ThrowFlashbang(const FInputActionValue& Value)
 {
-	// 쿨타임 중이면 사용 불가
-	if (bFlashbangOnCooldown || bIsFanFiring || bIsReloading || bIsDodging)
+	// 사망, 쿨타임 중, 팬 파이어 중, 재장전 중, 구르기 중이면 사용 불가
+	if (IsDead() || bFlashbangOnCooldown || bIsFanFiring || bIsReloading || bIsDodging)
 	{
 		return;
 	}
+	
+    // 플레이어 시점에서 약간 앞쪽 위치 계산
+    FVector CameraLocation;
+    FRotator CameraRotation;
+    GetActorEyesViewPoint(CameraLocation, CameraRotation);
+
+    // 전방 벡터 계산
+    FVector ForwardVector = CameraRotation.Vector();
+
+    // 약간 앞쪽에 섬광탄이 터지는 위치 계산
+    FlashbangLocation = CameraLocation + (ForwardVector * 500.0f);
+    
+    // 서버 RPC 호출
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        ServerThrowFlashbang(FlashbangLocation);
+        return;
+    }
+    
 	// 쿨타임 설정
 	bFlashbangOnCooldown = true;
 	GetWorld()->GetTimerManager().SetTimer(
@@ -429,80 +582,136 @@ void ACassidyCharacter::ThrowFlashbang(const FInputActionValue& Value)
 
 	UE_LOG(LogTemp, Log, TEXT("섬광탄 사용"));
 
-	// 플레이어 시점에서 약간 앞쪽 위치 계산
-	FVector CameraLocation;
-	FRotator CameraRotation;
-	GetActorEyesViewPoint(CameraLocation, CameraRotation);
-
-	// 전방 벡터 계산
-	FVector ForwardVector = CameraRotation.Vector();
-
-	// 약간 앞쪽에 섬광탄이 터지는 위치 계산 (약 3미터 앞)
-	FlashbangLocation = CameraLocation + (ForwardVector * 500.0f);
-
+	// 지연 후 섬광탄 폭발 설정
 	FTimerHandle TimerHandle_Flashbang;
 	GetWorld()->GetTimerManager().SetTimer(
 		TimerHandle_Flashbang,
-		[this]() {Flashbang(); },
+		this,
+		&ACassidyCharacter::Flashbang,
 		0.12f,
 		false
 	);
-
 }
 
+// 서버에서 섬광탄 처리
+bool ACassidyCharacter::ServerThrowFlashbang_Validate(const FVector_NetQuantize& Location)
+{
+    return true;
+}
+
+void ACassidyCharacter::ServerThrowFlashbang_Implementation(const FVector_NetQuantize& Location)
+{
+    if (!IsDead() && !bFlashbangOnCooldown && !bIsFanFiring && !bIsReloading && !bIsDodging)
+    {
+        FlashbangLocation = Location;
+        ThrowFlashbang(FInputActionValue());
+    }
+}
+
+// 섬광탄 폭발 효과
 void ACassidyCharacter::Flashbang()
 {
-
-	// 섬광탄 이펙트 재생
-	if (FlashbangExplosionEffect)
-	{
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), FlashbangExplosionEffect, FlashbangLocation, FRotator::ZeroRotator);
-	}
-
-	// 섬광탄 소리 재생
-	if (FlashbangSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, FlashbangSound, FlashbangLocation);
-	}
-
-	// 디버그 표시 (개발용)
-#if WITH_EDITOR
-	DrawDebugSphere(GetWorld(), FlashbangLocation, FlashbangRadius, 16, FColor::Yellow, false, 1.0f);
-#endif
+    // 서버에서 효과 전파
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        MulticastPlayFlashbangEffects(FlashbangLocation);
+        
+        // 범위 내 액터에 섬광 효과 적용
+        TArray<AActor*> OverlappingActors;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), OverlappingActors);
+        
+        for (AActor* Actor : OverlappingActors)
+        {
+            // 자기 자신은 제외
+            if (Actor != this)
+            {
+                // 거리 계산
+                float Distance = FVector::Dist(FlashbangLocation, Actor->GetActorLocation());
+                
+                // 범위 내에 있으면 효과 적용 (이후 구현)
+                if (Distance <= FlashbangRadius)
+                {
+                    // AOverwatchCharacter* OverwatchCharacter = Cast<AOverwatchCharacter>(Actor);
+                    // if (OverwatchCharacter)
+                    // {
+                    //     // 섬광 효과 적용
+                    // }
+                }
+            }
+        }
+    }
 }
 
+// 모든 클라이언트에 섬광탄 효과 전파
+void ACassidyCharacter::MulticastPlayFlashbangEffects_Implementation(const FVector_NetQuantize& Location)
+{
+    // 섬광탄 이펙트 재생
+    if (FlashbangExplosionEffect)
+    {
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), FlashbangExplosionEffect, Location, FRotator::ZeroRotator);
+    }
+
+    // 섬광탄 소리 재생
+    if (FlashbangSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, FlashbangSound, Location);
+    }
+    
+    // 디버그 표시 (개발용)
+    #if WITH_EDITOR
+    DrawDebugSphere(GetWorld(), Location, FlashbangRadius, 16, FColor::Yellow, false, 1.0f);
+    #endif
+}
+
+// 섬광탄 쿨타임 완료
 void ACassidyCharacter::FinishFlashbangCooldown()
 {
 	bFlashbangOnCooldown = false;
 	UE_LOG(LogTemp, Log, TEXT("섬광탄 쿨타임 완료"));
 }
 
-
-void ACassidyCharacter::Dodge()
+// 구르기 입력 처리
+void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 {
-	if (bIsDodging || bDodgingOnCooldown || bIsFanFiring)
+	// 사망, 구르기 중, 쿨타임 중, 팬 파이어 중이면 불가
+	if (IsDead() || bIsDodging || bDodgingOnCooldown || bIsFanFiring)
 	{
 		return;
 	}
+	
+    // 서버 RPC 호출
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        ServerDodge();
+        return;
+    }
+    
 	bIsDodging = true;
 	bDodgingOnCooldown = true;
 
-	StopFanFireUI();
+	// 팬 파이어 UI 중지 (로컬 플레이어만)
+    if (IsLocallyControlled())
+    {
+	    StopFanFireUI();
+    }
 
+	// 재장전 중이면 중단하고 즉시 장전 완료
 	if (bIsReloading)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Reload);
 		FinishReload();
 	}
 
+	// 쿨타임 타이머 설정
 	FTimerHandle TimerHandle_DodgeCooldown;
 	GetWorld()->GetTimerManager().SetTimer(
 		TimerHandle_DodgeCooldown,
-		[this]() {bDodgingOnCooldown = false;},
+		[this]() { bDodgingOnCooldown = false; },
 		DodgeCooldown,
 		false
 	);
 
+	// 구르기 종료 타이머 설정
 	FTimerHandle TimerHandle_Dodge;
 	GetWorld()->GetTimerManager().SetTimer(
 		TimerHandle_Dodge,
@@ -512,28 +721,70 @@ void ACassidyCharacter::Dodge()
 		false
 	);
 
-	UCharacterMovementComponent* MovementComp = GetCharacterMovement();
+	// 이동 속도 증가
+	/*UCharacterMovementComponent* MovementComp = GetCharacterMovement();
 	MovementComp->MaxWalkSpeed = DodgeSpeed;
-	MovementComp->MaxAcceleration = 50000.0f;
-	DownCameraOnDodge();
-	//MovementComp->SetMovementMode(MOVE_Flying);
+	MovementComp->MaxAcceleration = 50000.0f;*/
 
-	if (DodgeSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, DodgeSound, GetActorLocation());
-	}
+	
+    // 모든 클라이언트에 효과 전파
+    MulticastPlayDodgeEffects();
 
 	UE_LOG(LogTemp, Log, TEXT("구르기"));
 }
 
+// 서버에서 구르기 처리
+bool ACassidyCharacter::ServerDodge_Validate()
+{
+    return true;
+}
+
+void ACassidyCharacter::ServerDodge_Implementation()
+{
+    if (!IsDead() && !bIsDodging && !bDodgingOnCooldown && !bIsFanFiring)
+    {
+        Dodge(FInputActionValue());
+    }
+}
+
+// 모든 클라이언트에 구르기 효과 전파
+void ACassidyCharacter::MulticastPlayDodgeEffects_Implementation()
+{
+    // 이동 속도 증가
+	UCharacterMovementComponent* MovementComp = GetCharacterMovement();
+	MovementComp->MaxWalkSpeed = DodgeSpeed;
+	MovementComp->MaxAcceleration = 50000.0f;
+
+    // 카메라 효과 (로컬 플레이어만)
+    if (IsLocallyControlled())
+    {
+        DownCameraOnDodge();
+    }
+
+    // 구르기 사운드 재생
+    if (DodgeSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, DodgeSound, GetActorLocation());
+    }
+}
+
+// 모든 클라이언트에 구르기 종료 효과 전파
+void ACassidyCharacter::MulticastPlayDodgeResetEffects_Implementation()
+{
+    // 이동 속도 원상복구
+    UCharacterMovementComponent* MovementComp = GetCharacterMovement();
+    MovementComp->MaxWalkSpeed = BaseWalkSpeed;
+    MovementComp->MaxAcceleration = 2048.0f;
+}
+
+// 구르기 종료
 void ACassidyCharacter::FinishDodge()
 {
 	bIsDodging = false;
-	CurrentAmmo = MaxAmmo;
-	UCharacterMovementComponent* MovementComp = GetCharacterMovement();
-	MovementComp->MaxWalkSpeed = MaxWalkSpeed;
-	MovementComp->MaxAcceleration = 2048.0f;
-	MovementComp->SetMovementMode(MOVE_Walking);
+	CurrentAmmo = MaxAmmo; // 구르기 후 자동 재장전
+
+    // 모든 클라이언트에 효과 전파
+    MulticastPlayDodgeResetEffects();
 
 	UE_LOG(LogTemp, Log, TEXT("구르기 끝"));
 }
