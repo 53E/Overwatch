@@ -315,9 +315,7 @@ void ACassidyCharacter::FireWeapon()
 // 총알 발사 로직
 void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
 {
-
-        
-    // 로컬에서 처리할 경우
+    // 로컬 클라이언트일 경우 (서버가 아닌 경우)
     if (GetLocalRole() < ROLE_Authority)
     {
         // 카메라 정보 가져오기
@@ -337,10 +335,37 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
             CameraRotation.Yaw += YawSpread;
         }
         
-        // 서버에 RPC 호출
-        ServerFireBullet(CameraLocation, CameraRotation.Vector(), bIsFanFireShot);
+        FVector TraceStart = CameraLocation;
+        FVector TraceDirection = CameraRotation.Vector();
         
-        // 로컬 클라이언트에서도 반동 효과 추가 (이 부분을 추가)
+        // 로컬에서 디버그 라인 그리기 (정확한 라인)
+        FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
+        
+        // 충돌 쿼리 파라미터 설정
+        FCollisionQueryParams QueryParams;
+        QueryParams.AddIgnoredActor(this);
+        QueryParams.bTraceComplex = true;
+        
+        // 명중 결과
+        FHitResult HitResult;
+        
+        // 라인 트레이스 실행
+        bool bHit = GetWorld()->LineTraceSingleByChannel(
+            HitResult,
+            TraceStart,
+            TraceEnd,
+            ECC_Visibility,
+            QueryParams
+        );
+        
+        // 디버그 라인 그리기
+        FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
+        DrawDebugLine(GetWorld(), TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
+        
+        // 서버에 RPC 호출
+        ServerFireBullet(TraceStart, TraceDirection, bIsFanFireShot);
+        
+        // 로컬 반동 효과 추가
         if (IsLocallyControlled())
         {
             Recoil(bIsFanFireShot);
@@ -349,81 +374,76 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
         return;
     }
 
-	// 총알 소모
-	CurrentAmmo--;
-
-    // 효과 재생 (모든 클라이언트에 전파)
-    MulticastPlayFireEffects(bIsFanFireShot);
-    UE_LOG(LogTemp, Log, TEXT("반동!! 01"));
-	// 반동 효과 (로컬 클라이언트에서만)
+    // 서버 측 코드 (리슨 서버 호스트 또는 데디케이티드 서버)
+    
+    // 총알 소모
+    CurrentAmmo--;
+    
+    // 카메라 정보 가져오기
+    FVector CameraLocation;
+    FRotator CameraRotation;
+    GetActorEyesViewPoint(CameraLocation, CameraRotation);
+    
+    // 팬 파이어의 경우 랜덤 각도 적용
+    if (bIsFanFireShot)
+    {
+        // 랜덤 편차 계산
+        float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+        float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+        
+        // 원래 회전에 랜덤 편차 추가
+        CameraRotation.Pitch += PitchSpread;
+        CameraRotation.Yaw += YawSpread;
+    }
+    
+    FVector TraceStart = CameraLocation;
+    FVector TraceDirection = CameraRotation.Vector();
+    FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
+    
+    // 충돌 쿼리 파라미터 설정
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+    QueryParams.bTraceComplex = true;
+    
+    // 명중 결과
+    FHitResult HitResult;
+    
+    // 라인 트레이스 실행
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        TraceStart,
+        TraceEnd,
+        ECC_Visibility,
+        QueryParams
+    );
+    
+    // 효과 재생 (모든 클라이언트에 전파) - 발사 위치와 방향 정보 추가
+    MulticastPlayFireEffects(bIsFanFireShot, TraceStart, TraceDirection);
+    
+    // 반동 효과 (로컬 클라이언트에서만)
     if (IsLocallyControlled())
     {
-	    Recoil(bIsFanFireShot);
-        UE_LOG(LogTemp, Log, TEXT("반동!! 02"));
+        Recoil(bIsFanFireShot);
     }
-
-	UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
-
-	// 카메라 정보 가져오기
-	FVector CameraLocation;
-	FRotator CameraRotation;
-	GetActorEyesViewPoint(CameraLocation, CameraRotation);
-
-	// 팬 파이어의 경우 랜덤 각도 적용
-	if (bIsFanFireShot)
-	{
-		// 랜덤 편차 계산
-		float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-		float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-		
-		// 원래 회전에 랜덤 편차 추가
-		CameraRotation.Pitch += PitchSpread;
-		CameraRotation.Yaw += YawSpread;
-	}
-
-	FVector TraceStart = CameraLocation;
-	FVector TraceDirection = CameraRotation.Vector();
-	FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
-
-	// 충돌 쿼리 파라미터 설정
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this); // 자기 자신은 무시
-	QueryParams.bTraceComplex = true; // 복잡한 충돌 체크
-	
-	// 명중 결과
-	FHitResult HitResult;
-	
-	// 라인 트레이스 실행
-	bool bHit = GetWorld()->LineTraceSingleByChannel(
-		HitResult,
-		TraceStart,
-		TraceEnd,
-		ECC_Visibility,
-		QueryParams
-	);
-
-	// 디버그 라인 그리기 (개발용)
-	#if WITH_EDITOR
-	FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
-	DrawDebugLine(GetWorld(), TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 1.0f, 0, 1.0f);
-	#endif
-
-	// 명중 시 데미지 처리 (서버에서만 수행)
-	if (bHit && GetLocalRole() == ROLE_Authority)
-	{
-		AActor* HitActor = HitResult.GetActor();
-		if (HitActor)
-		{
-			// 데미지 적용 - Hit 함수 호출
+    
+    UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
+    
+    // 명중 시 데미지 처리 (서버에서만 수행)
+    if (bHit)
+    {
+        AActor* HitActor = HitResult.GetActor();
+        if (HitActor)
+        {
+            // 데미지 적용 - Hit 함수 호출
             ServerProcessHit(HitActor, HitResult.ImpactPoint);
-		}
-	}
-
-	// 총알을 모두 소모했고 팬 파이어가 아니면 자동 재장전
-	if (CurrentAmmo <= 0 && !bIsFanFiring)
-	{
-		StartReload(FInputActionValue());
-	}
+        }
+    }
+    
+    // 총알을 모두 소모했고 팬 파이어가 아니면 자동 재장전
+    if (CurrentAmmo <= 0 && !bIsFanFiring)
+    {
+        StartReload(FInputActionValue());
+    }
 }
 
 // 서버에서 총알 발사 처리
@@ -434,8 +454,6 @@ bool ACassidyCharacter::ServerFireBullet_Validate(const FVector_NetQuantize& Sta
 
 void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot)
 {
-
-    
     // 사망, 팬 파이어 중, 재장전 중, 총알 부족이면 발사 불가
     if (IsDead() || (bIsFanFireShot == false && bIsFanFiring) || bIsReloading || CurrentAmmo <= 0)
     {
@@ -446,7 +464,7 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
     CurrentAmmo--;
     
     // 효과 재생 (모든 클라이언트에 전파)
-    MulticastPlayFireEffects(bIsFanFireShot);
+    MulticastPlayFireEffects(bIsFanFireShot, StartLocation, Direction);
     
     // 트레이스 엔드 포인트 계산
     FVector TraceEnd = StartLocation + (Direction * WeaponRange);
@@ -467,6 +485,13 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         ECC_Visibility,
         QueryParams
     );
+    
+    // 서버 로컬 디버그 라인 그리기 (리슨 서버일 경우)
+    if (IsLocallyControlled())
+    {
+        FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
+        DrawDebugLine(GetWorld(), StartLocation, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
+    }
     
     // 명중 시 데미지 처리
     if (bHit)
@@ -506,7 +531,7 @@ void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const 
 }
 
 // 모든 클라이언트에 총알 발사 효과 전파
-void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireShot)
+void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireShot, const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction)
 {
     // 발사 애니메이션 재생
     if (FireAnimation)
@@ -541,6 +566,9 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
         
         UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ShellEject, EjectLocation, EjectRotation);
     }
+    
+    // 디버그 라인은 클라이언트 측에서만 그림 (멀티캐스트에서는 제거)
+    // 여기서 그리면 이상한 방향으로 나가는 문제가 발생
 }
 
 // 섬광탄 던지기
@@ -658,9 +686,7 @@ void ACassidyCharacter::MulticastPlayFlashbangEffects_Implementation(const FVect
     }
     
     // 디버그 표시 (개발용)
-    #if WITH_EDITOR
-    DrawDebugSphere(GetWorld(), Location, FlashbangRadius, 16, FColor::Yellow, false, 1.0f);
-    #endif
+    //DrawDebugSphere(GetWorld(), Location, FlashbangRadius, 16, FColor::Yellow, false, 2.0f);
 }
 
 // 섬광탄 쿨타임 완료
@@ -721,13 +747,7 @@ void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 		false
 	);
 
-	// 이동 속도 증가
-	/*UCharacterMovementComponent* MovementComp = GetCharacterMovement();
-	MovementComp->MaxWalkSpeed = DodgeSpeed;
-	MovementComp->MaxAcceleration = 50000.0f;*/
-
-	
-    // 모든 클라이언트에 효과 전파
+	// 모든 클라이언트에 효과 전파
     MulticastPlayDodgeEffects();
 
 	UE_LOG(LogTemp, Log, TEXT("구르기"));

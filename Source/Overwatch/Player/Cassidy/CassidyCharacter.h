@@ -204,8 +204,8 @@ protected:
 	
 	// 멀티캐스트 RPC 구현 (효과 동기화)
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayFireEffects(bool bIsFanFireShot);
-	void MulticastPlayFireEffects_Implementation(bool bIsFanFireShot);
+	void MulticastPlayFireEffects(bool bIsFanFireShot, const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction);
+	void MulticastPlayFireEffects_Implementation(bool bIsFanFireShot, const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction);
 	
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayReloadEffects();
