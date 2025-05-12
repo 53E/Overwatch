@@ -9,6 +9,8 @@ class UAnimMontage;
 class USoundBase;
 class UParticleSystem;
 class UInputAction;
+class UNiagaraSystem;
+
 
 /**
  * 캐서디 캐릭터 클래스
@@ -39,7 +41,7 @@ protected:
 	/** 총소리 */
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	USoundBase* FireSound;
-
+	
 	/** 재장전 소리 */
 	UPROPERTY(EditDefaultsOnly, Category = "Sound")
 	USoundBase* ReloadSound;
@@ -55,6 +57,9 @@ protected:
 	/** 탄피 이펙트 */
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")
 	UParticleSystem* ShellEject;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Effects")
+	UNiagaraSystem* BulletTracer;
 
 	/** 최대 탄창 수 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
@@ -218,6 +223,10 @@ protected:
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlayDodgeEffects();
 	void MulticastPlayDodgeEffects_Implementation();
+
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayTracerEffect(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation);
+	void MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation);
 	
 	// 구르기 종료 효과를 위한 멀티캐스트 RPC 추가
 	UFUNCTION(NetMulticast, Reliable)
@@ -254,6 +263,10 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void StopFanFireUI();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Fire")
+	void FireSoundEcho();
+	
 
 private:
 	// 타이머 핸들

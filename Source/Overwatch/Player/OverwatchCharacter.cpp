@@ -282,13 +282,13 @@ void AOverwatchCharacter::Look(const FInputActionValue& Value)
 		// 좌우 시점 이동
 		if (LookAxisVector.X != 0.0f)
 		{
-			AddControllerYawInput(LookAxisVector.X);
+			AddControllerYawInput(LookAxisVector.X * 0.75f);
 		}
 		
 		// 상하 시점 이동
 		if (LookAxisVector.Y != 0.0f)
 		{
-			AddControllerPitchInput(LookAxisVector.Y);
+			AddControllerPitchInput(LookAxisVector.Y * 0.75f);
 		}
 	}
 }

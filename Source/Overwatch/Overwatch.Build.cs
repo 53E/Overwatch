@@ -10,7 +10,7 @@ public class Overwatch : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" , "UMG", "Slate" , "SlateCore", "EnhancedInput", "OnlineSubsystem", "OnlineSubsystemUtils" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Niagara"});
 
         PrivateIncludePathModuleNames.AddRange(
             new string[] {

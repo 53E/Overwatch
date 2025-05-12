@@ -16,7 +16,10 @@
 #include "Math/UnrealMathUtility.h"
 // 네트워크 관련 헤더
 #include "Net/UnrealNetwork.h"
+#include "Particles/ParticleSystemComponent.h"
 
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraComponent.h"
 
 // 생성자
 ACassidyCharacter::ACassidyCharacter()
@@ -47,7 +50,7 @@ ACassidyCharacter::ACassidyCharacter()
 	ReloadTime = 1.5f;    // 재장전 시간 1.5초
 	WeaponDamage = 70.0f; // 기본 데미지
 	WeaponRange = 5000.0f; // 사거리
-	FanFireMaxSpreadAngle = 7.5f; // 팬 파이어 최대 발산 각도 (도 단위)
+	FanFireMaxSpreadAngle = 4.0f; // 팬 파이어 최대 발산 각도 (도 단위)
 
 	// 반동 설정
 	RecoilRate = 1.15f;
@@ -340,6 +343,7 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
         
         // 로컬에서 디버그 라인 그리기 (정확한 라인)
         FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
+
         
         // 충돌 쿼리 파라미터 설정
         FCollisionQueryParams QueryParams;
@@ -357,11 +361,17 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
             ECC_Visibility,
             QueryParams
         );
+    	if (bHit)
+    	{
+    		FString Name = HitResult.GetActor()->GetName();
+    		UE_LOG(LogTemp, Log, TEXT("<명중> %s"), *Name);
+    	}
         
-        // 디버그 라인 그리기
+        /* 디버그 라인 그리기
         FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
         DrawDebugLine(GetWorld(), TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
-        
+        */
+    	
         // 서버에 RPC 호출
         ServerFireBullet(TraceStart, TraceDirection, bIsFanFireShot);
         
@@ -426,7 +436,7 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
         Recoil(bIsFanFireShot);
     }
     
-    UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
+    //UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
     
     // 명중 시 데미지 처리 (서버에서만 수행)
     if (bHit)
@@ -462,12 +472,18 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
     
     // 총알 소모
     CurrentAmmo--;
+	UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
     
     // 효과 재생 (모든 클라이언트에 전파)
     MulticastPlayFireEffects(bIsFanFireShot, StartLocation, Direction);
     
-    // 트레이스 엔드 포인트 계산
-    FVector TraceEnd = StartLocation + (Direction * WeaponRange);
+    // 트레이스 엔드 포인트 계산 파라미터의 Dir말고 다시계산 why? 전달하면서 값 오류
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetActorEyesViewPoint(CameraLocation, CameraRotation);
+	FVector TraceDirection = CameraRotation.Vector();
+	
+    FVector TraceEnd = StartLocation + (TraceDirection * WeaponRange);
     
     // 충돌 쿼리 파라미터 설정
     FCollisionQueryParams QueryParams;
@@ -485,13 +501,16 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         ECC_Visibility,
         QueryParams
     );
+
+	MulticastPlayTracerEffect(StartLocation, TraceEnd);
     
-    // 서버 로컬 디버그 라인 그리기 (리슨 서버일 경우)
+    /* 서버 로컬 디버그 라인 그리기 (리슨 서버일 경우)
     if (IsLocallyControlled())
     {
         FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
         DrawDebugLine(GetWorld(), StartLocation, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
     }
+	*/
     
     // 명중 시 데미지 처리
     if (bHit)
@@ -547,6 +566,11 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
     if (FireSound)
     {
         UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
+    	if (!bIsFanFireShot)
+    	{
+    		FireSoundEcho();
+    	}
+
     }
 
     // 총구 이펙트 재생
@@ -786,6 +810,50 @@ void ACassidyCharacter::MulticastPlayDodgeEffects_Implementation()
     {
         UGameplayStatics::PlaySoundAtLocation(this, DodgeSound, GetActorLocation());
     }
+}
+
+void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation,
+	const FVector_NetQuantize& EndLocation)
+{
+	
+	UNiagaraComponent* TracerEffect = nullptr;
+	bool bHit = false;
+	FHitResult HitResult;
+	if (BulletTracer)
+	{
+		FVector Direction = (EndLocation - StartLocation).GetSafeNormal();
+		float Distance = FVector::Dist(StartLocation, EndLocation);
+
+		// 충돌 테스트 
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		QueryParams.bTraceComplex = true;
+		bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			StartLocation,
+			EndLocation,
+			ECC_Visibility,
+			QueryParams
+		);
+	
+		
+		TracerEffect =UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+		GetWorld(),
+		BulletTracer,
+		StartLocation,
+		Direction.Rotation(),
+		FVector(1.f),
+		true                    // bAutoDestroy
+		);
+	}
+
+	if (TracerEffect)
+	{
+		TracerEffect->SetVariableVec3(FName("BeamEnd"),bHit? HitResult.ImpactPoint : EndLocation );
+
+		TracerEffect->SetAutoDestroy(true);
+	}
+	
 }
 
 // 모든 클라이언트에 구르기 종료 효과 전파
