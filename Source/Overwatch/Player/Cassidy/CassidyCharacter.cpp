@@ -155,33 +155,46 @@ void ACassidyCharacter::FanFire(const FInputActionValue& Value)
     if (GetLocalRole() < ROLE_Authority)
     {
         ServerFanFire();
+        if (IsLocallyControlled())
+        {
+            FanFireUI((CurrentAmmo + 5) * FanFireRate);
+        }
+    	return;
     }
     
     // 클라이언트와 서버 모두에서 실행
 	bIsFanFiring = true;
 
-	// UI 업데이트 (블루프린트에서 구현)
-    if (IsLocallyControlled())
-    {
-	    FanFireUI((CurrentAmmo + 5) * FanFireRate);
-    }
 	
 	// 남은 총알만큼 연사
 	int32 bulletsToFire = CurrentAmmo;
+	CurrentAmmo = 0; 
+	// 나머지 총알 타이머로 발사
+	for (FTimerHandle& Handle : FanFireTimerHandles)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(Handle);
+	}
+	FanFireTimerHandles.Empty();
 	
 	// 즉시 첫 발 발사
+	UE_LOG(LogTemp, Log, TEXT("FanFire: 발사 번호 1"));
 	FireBullet(true);
 	
 	// 나머지 총알 타이머로 발사
 	for (int32 i = 1; i < bulletsToFire; i++)
 	{
-		FTimerHandle TimerHandle_FanFire;
+		FTimerHandle TimerHandle;
+		int32 bulletIndex = i;
 		GetWorld()->GetTimerManager().SetTimer(
-			TimerHandle_FanFire,
-			[this]() { FireBullet(true); },
+			TimerHandle,
+			[this, bulletIndex]() { 
+				UE_LOG(LogTemp, Log, TEXT("FanFire: 발사 번호 %d"), bulletIndex+1);
+				FireBullet(true); 
+			},
 			FanFireRate * i,
 			false
 		);
+		FanFireTimerHandles.Add(TimerHandle);
 	}
 	
 	// 팬 파이어 종료 타이머 설정
@@ -326,68 +339,20 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
         FRotator CameraRotation;
         GetActorEyesViewPoint(CameraLocation, CameraRotation);
         
-        // 팬 파이어의 경우 랜덤 각도 적용
-        if (bIsFanFireShot)
-        {
-            // 랜덤 편차 계산
-            float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-            float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-            
-            // 원래 회전에 랜덤 편차 추가
-            CameraRotation.Pitch += PitchSpread;
-            CameraRotation.Yaw += YawSpread;
-        }
-        
         FVector TraceStart = CameraLocation;
         FVector TraceDirection = CameraRotation.Vector();
-        
-        // 로컬에서 디버그 라인 그리기 (정확한 라인)
-        FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
-
-        
-        // 충돌 쿼리 파라미터 설정
-        FCollisionQueryParams QueryParams;
-        QueryParams.AddIgnoredActor(this);
-        QueryParams.bTraceComplex = true;
-        
-        // 명중 결과
-        FHitResult HitResult;
-        
-        // 라인 트레이스 실행
-        bool bHit = GetWorld()->LineTraceSingleByChannel(
-            HitResult,
-            TraceStart,
-            TraceEnd,
-            ECC_Visibility,
-            QueryParams
-        );
-    	if (bHit)
-    	{
-    		FString Name = HitResult.GetActor()->GetName();
-    		UE_LOG(LogTemp, Log, TEXT("<명중> %s"), *Name);
-    	}
-        
-        /* 디버그 라인 그리기
-        FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
-        DrawDebugLine(GetWorld(), TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
-        */
     	
         // 서버에 RPC 호출
         ServerFireBullet(TraceStart, TraceDirection, bIsFanFireShot);
-        
-        // 로컬 반동 효과 추가
-        if (IsLocallyControlled())
-        {
-            Recoil(bIsFanFireShot);
-        }
+    	
         
         return;
     }
-
+	
+	
     // 서버 측 코드 (리슨 서버 호스트 또는 데디케이티드 서버)
     
-    // 총알 소모
-    CurrentAmmo--;
+    // 총알 소모 (제거됨 - ServerFireBullet에서 처리되기 때문에)
     
     // 카메라 정보 가져오기
     FVector CameraLocation;
@@ -438,6 +403,9 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
     
     //UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
     
+    // 트레이서 이펙트 추가
+    MulticastPlayTracerEffect(TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd);
+    
     // 명중 시 데미지 처리 (서버에서만 수행)
     if (bHit)
     {
@@ -472,7 +440,7 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
     
     // 총알 소모
     CurrentAmmo--;
-	UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
+	UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d (ServerFireBullet)"), CurrentAmmo);
     
     // 효과 재생 (모든 클라이언트에 전파)
     MulticastPlayFireEffects(bIsFanFireShot, StartLocation, Direction);
@@ -481,6 +449,16 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
 	FVector CameraLocation;
 	FRotator CameraRotation;
 	GetActorEyesViewPoint(CameraLocation, CameraRotation);
+	if (bIsFanFireShot)
+	{
+		// 랜덤 편차 계산
+		float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+		float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
+            
+		// 원래 회전에 랜덤 편차 추가
+		CameraRotation.Pitch += PitchSpread;
+		CameraRotation.Yaw += YawSpread;
+	}
 	FVector TraceDirection = CameraRotation.Vector();
 	
     FVector TraceEnd = StartLocation + (TraceDirection * WeaponRange);
@@ -552,6 +530,12 @@ void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const 
 // 모든 클라이언트에 총알 발사 효과 전파
 void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireShot, const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction)
 {
+	// 로컬 반동 효과 추가
+	if (IsLocallyControlled())
+	{
+		Recoil(bIsFanFireShot);
+	}
+	
     // 발사 애니메이션 재생
     if (FireAnimation)
     {
@@ -815,7 +799,6 @@ void ACassidyCharacter::MulticastPlayDodgeEffects_Implementation()
 void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation,
 	const FVector_NetQuantize& EndLocation)
 {
-	
 	UNiagaraComponent* TracerEffect = nullptr;
 	bool bHit = false;
 	FHitResult HitResult;
@@ -835,12 +818,13 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 			ECC_Visibility,
 			QueryParams
 		);
-	
+
+		FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("Muzzle"));
 		
 		TracerEffect =UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		GetWorld(),
 		BulletTracer,
-		StartLocation,
+		MuzzleLocation,
 		Direction.Rotation(),
 		FVector(1.f),
 		true                    // bAutoDestroy

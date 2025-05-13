@@ -272,6 +272,8 @@ private:
 	// 타이머 핸들
 	FTimerHandle TimerHandle_Reload;
 	FTimerHandle TimerHandle_FlashbangCooldown;
+	//Faanfire 핸들러 배열
+	TArray<FTimerHandle> FanFireTimerHandles;
 	
 	// 섬광탄 위치
 	FVector FlashbangLocation;
