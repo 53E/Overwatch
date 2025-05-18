@@ -25,10 +25,10 @@ void UMainMenuMaster::SwitchToScreen(EMenuScreen Screen)
     PreviousScreen = CurrentScreen;
     CurrentScreen = Screen;
 
-    // 1. À§Á¬ÀÌ ¾ÆÁ÷ »ý¼ºµÇÁö ¾ÊÀº °æ¿ì »õ·Î »ý¼º
+    // 1. ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     if (!ScreenWidgets.Contains(Screen))
     {
-        // È­¸é À¯Çü¿¡ ¸Â´Â À§Á¬ Å¬·¡½º·Î »õ ÀÎ½ºÅÏ½º »ý¼º
+        // È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Â´ï¿½ ï¿½ï¿½ï¿½ï¿½ Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Î½ï¿½ï¿½Ï½ï¿½ ï¿½ï¿½ï¿½ï¿½
         UOutGameUI* NewScreenWidget = CreateWidget<UOutGameUI>(
             this, ScreenWidgetClasses[Screen]);
         NewScreenWidget->MasterMenu = this;
@@ -38,10 +38,10 @@ void UMainMenuMaster::SwitchToScreen(EMenuScreen Screen)
 
     }
 
-    // 2. ½ºÀ§Ã³¿¡¼­ ÇØ´ç È­¸é À§Á¬À» È°¼ºÈ­
+    // 2. ï¿½ï¿½ï¿½ï¿½Ã³ï¿½ï¿½ï¿½ï¿½ ï¿½Ø´ï¿½ È­ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­
     ContentSwitcher->SetActiveWidget(ScreenWidgets[Screen]);
 
-    // 3. È­¸é ÀüÈ¯ ÀÌº¥Æ® ¹ß»ý
+    // 3. È­ï¿½ï¿½ ï¿½ï¿½È¯ ï¿½Ìºï¿½Æ® ï¿½ß»ï¿½
     OnScreenChanged(Screen);
 }
 

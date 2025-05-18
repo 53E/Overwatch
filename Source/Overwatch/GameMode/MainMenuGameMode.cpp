@@ -9,40 +9,15 @@
 
 AMainMenuGameMode::AMainMenuGameMode()
 {
-    PlayerControllerClass = APlayerController::StaticClass();
+    PlayerControllerClass = AMenuPlayerController::StaticClass();
     DefaultPawnClass = nullptr;
 }
 
 void AMainMenuGameMode::BeginPlay()
 {
     Super::BeginPlay();
-
-
-    TArray<AActor*> FoundCameras;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), ACameraActor::StaticClass(), FoundCameras);
-
-    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
-
-    if (PC)
-    {
-        // UI �Է� ��� 
-        FInputModeUIOnly InputMode;
-        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-        PC->SetInputMode(InputMode);
-        PC->bShowMouseCursor = true;
-
-        if (FoundCameras.Num() > 0)
-        {
-            PC->SetViewTarget(FoundCameras[0]);
-        }
-
-        if (MainMenuWidgetClass)
-        {
-            UUserWidget* MainMenuWidget = CreateWidget<UUserWidget>(PC, MainMenuWidgetClass);
-            if (MainMenuWidget)
-            {
-                MainMenuWidget->AddToViewport(0);
-            }
-        }
-    }
+    
+    // 서버에서는 기본 설정만 처리
+    // UI와 카메라 설정은 MenuPlayerController에서 처리
+    UE_LOG(LogTemp, Warning, TEXT("MainMenuGameMode: Started on server"));
 }

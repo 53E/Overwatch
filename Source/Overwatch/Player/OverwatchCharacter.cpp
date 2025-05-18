@@ -31,6 +31,7 @@ AOverwatchCharacter::AOverwatchCharacter()
 
 	// 네트워크 복제 활성화
 	bReplicates = true;
+	bUseControllerRotationPitch = true;
 	SetReplicateMovement(true);
 
 	// 카메라 컴포넌트 생성
@@ -44,6 +45,10 @@ AOverwatchCharacter::AOverwatchCharacter()
 	FPWeaponMesh->SetOnlyOwnerSee(true); // 소유자만 볼 수 있음
 	FPWeaponMesh->SetupAttachment(FirstPersonCamera);
 	FPWeaponMesh->CastShadow = false;
+
+	PeaceKeeperWeapon = CreateDefaultSubobject<UChildActorComponent>(TEXT("PeaceKeeper"));
+	PeaceKeeperWeapon->SetupAttachment(FirstPersonCamera);
+	
 	
 	// 3인칭 무기 메시 생성 (다른 플레이어에게 보이는 것)
 	TPWeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("TPWeaponMesh"));

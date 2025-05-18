@@ -1,29 +1,35 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "MainMenuWidget.h"
+
+
 
 void UMainMenuWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    // ±âº» ¸Þ´º »óÅÂ ¼³Á¤
+    // ï¿½âº» ï¿½Þ´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     CurrentMenuState = EMenuState::MainMenu;
+}
+
+void UMainMenuWidget::OpenLevel()
+{
+    
 }
 
 void UMainMenuWidget::ChangeMenuState(EMenuState NewState)
 {
-    // ÀÌÀü »óÅÂ¿Í ´Ù¸¥ °æ¿ì¸¸ Ã³¸®
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ ï¿½Ù¸ï¿½ ï¿½ï¿½ì¸¸ Ã³ï¿½ï¿½
     if (CurrentMenuState != NewState)
     {
         CurrentMenuState = NewState;
 
-        // ºí·çÇÁ¸°Æ®¿¡¼­ ¿À¹ö¶óÀÌµåÇÒ ¼ö ÀÖµµ·Ï ·ÎÁ÷Àº ÃÖ¼ÒÈ­
-        // »óÅÂ º¯°æ¿¡ µû¸¥ Ãß°¡ ·ÎÁ÷Àº ºí·çÇÁ¸°Æ®¿¡¼­ ±¸Çö
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìµï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Öµï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¼ï¿½È­
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½æ¿¡ ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     }
 }
 
-// ¹öÆ° Å¬¸¯ ÀÌº¥Æ® Ã³¸® ÇÔ¼öµé
+// ï¿½ï¿½Æ° Å¬ï¿½ï¿½ ï¿½Ìºï¿½Æ® Ã³ï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½
 void UMainMenuWidget::OnPlayButtonClicked()
 {
     ChangeMenuState(EMenuState::Play);

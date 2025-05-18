@@ -52,7 +52,7 @@ protected:
 
 	/** 총구 이펙트 */
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")
-	UParticleSystem* MuzzleFlash;
+	UNiagaraSystem* MuzzleFlash;
 
 	/** 탄피 이펙트 */
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")

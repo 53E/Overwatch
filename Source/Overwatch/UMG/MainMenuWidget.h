@@ -10,7 +10,7 @@
  * 
  */
 
-// ¸Þ´º »óÅÂ ¿­°ÅÇü
+// ï¿½Þ´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 UENUM(BlueprintType)
 enum class EMenuState : uint8
 {
@@ -30,18 +30,19 @@ class OVERWATCH_API UMainMenuWidget : public UOutGameUI
 {
 	GENERATED_BODY()
 	public:
-    
+
+	void OpenLevel();
 
 
-    // ÇöÀç ¸Þ´º »óÅÂ
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½Þ´ï¿½ ï¿½ï¿½ï¿½ï¿½
     UPROPERTY(BlueprintReadWrite, Category = "Menu")
     EMenuState CurrentMenuState;
     
-    // ¸Þ´º ÀüÈ¯ ÇÔ¼ö
+    // ï¿½Þ´ï¿½ ï¿½ï¿½È¯ ï¿½Ô¼ï¿½
     UFUNCTION(BlueprintCallable, Category = "Menu")
     void ChangeMenuState(EMenuState NewState);
     
-    // ¹öÆ° Å¬¸¯ ÀÌº¥Æ® Ã³¸® ÇÔ¼öµé
+    // ï¿½ï¿½Æ° Å¬ï¿½ï¿½ ï¿½Ìºï¿½Æ® Ã³ï¿½ï¿½ ï¿½Ô¼ï¿½ï¿½ï¿½
     UFUNCTION(BlueprintCallable, Category = "Menu")
     void OnPlayButtonClicked();
     

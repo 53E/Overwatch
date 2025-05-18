@@ -54,6 +54,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
 	USkeletalMeshComponent* TPWeaponMesh;
 
+	//피스톨 메시 bp로 받아옴
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
+	UChildActorComponent* PeaceKeeperWeapon;
+
 	/** 현재 체력 */
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float CurrentHealth;

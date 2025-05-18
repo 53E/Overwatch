@@ -560,10 +560,18 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
     // 총구 이펙트 재생
     if (MuzzleFlash)
     {
-        const FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("MuzzleSocket"));
-        const FRotator MuzzleRotation = FPWeaponMesh->GetSocketRotation(FName("MuzzleSocket"));
+        const FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("Muzzle"));
+        const FRotator MuzzleRotation = FPWeaponMesh->GetSocketRotation(FName("Muzzle"));
         
-        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFlash, MuzzleLocation, MuzzleRotation);
+    	UNiagaraFunctionLibrary::SpawnSystemAttached(
+			MuzzleFlash,                       
+			FPWeaponMesh,                        
+			FName("Muzzle"),                   
+			FVector::ZeroVector,              
+			FRotator::ZeroRotator,               
+			EAttachLocation::SnapToTarget,      
+			true                                  
+		);
     }
 
     // 탄피 이펙트 재생
@@ -716,6 +724,7 @@ void ACassidyCharacter::Dodge(const FInputActionValue& Value)
     // 서버 RPC 호출
     if (GetLocalRole() < ROLE_Authority)
     {
+    	StopFanFireUI();
         ServerDodge();
         return;
     }
@@ -723,11 +732,6 @@ void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 	bIsDodging = true;
 	bDodgingOnCooldown = true;
 
-	// 팬 파이어 UI 중지 (로컬 플레이어만)
-    if (IsLocallyControlled())
-    {
-	    StopFanFireUI();
-    }
 
 	// 재장전 중이면 중단하고 즉시 장전 완료
 	if (bIsReloading)
@@ -820,6 +824,10 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 		);
 
 		FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("Muzzle"));
+		if (PeaceKeeperWeapon)
+		{
+			
+		}
 		
 		TracerEffect =UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		GetWorld(),
