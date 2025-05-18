@@ -49,11 +49,11 @@ AOverwatchCharacter::AOverwatchCharacter()
 	PeaceKeeperWeapon = CreateDefaultSubobject<UChildActorComponent>(TEXT("PeaceKeeper"));
 	PeaceKeeperWeapon->SetupAttachment(FirstPersonCamera);
 	
-	
 	// 3인칭 무기 메시 생성 (다른 플레이어에게 보이는 것)
-	TPWeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("TPWeaponMesh"));
-	TPWeaponMesh->SetOwnerNoSee(true); // 소유자는 볼 수 없음
-	TPWeaponMesh->SetupAttachment(GetMesh()); // 캐릭터 메시에 부착
+	TPWeapon = CreateDefaultSubobject<UChildActorComponent>(TEXT("TPWeaponMesh"));
+	TPWeapon->SetupAttachment(GetMesh()); // 캐릭터 메시에 부착
+
+	GetMesh()->SetOwnerNoSee(true);
 
 	// 체력 초기화
 	MaxHealth = 200.0f;
@@ -80,18 +80,20 @@ void AOverwatchCharacter::BeginPlay()
 	bIsDead = false;
 	GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed;
 	
-	// 1인칭/3인칭 메시 가시성 설정
+	// 1인칭/3인칭 시점설정 FP는 소켓위치만 전송(보여주면 안됨!)
 	if (IsLocallyControlled())
 	{
 		// 로컬 플레이어는 1인칭 무기만 보임
-		FPWeaponMesh->SetVisibility(true);
-		TPWeaponMesh->SetVisibility(false);
+		FPWeaponMesh->SetVisibility(false);
+		TPWeapon->SetVisibility(false);
+		PeaceKeeperWeapon->SetVisibility(true); // PeaceKeeper 무기 표시
 	}
 	else
 	{
 		// 다른 플레이어는 3인칭 무기만 보임
 		FPWeaponMesh->SetVisibility(false);
-		TPWeaponMesh->SetVisibility(true);
+		TPWeapon->SetVisibility(true);
+		PeaceKeeperWeapon->SetVisibility(false); // PeaceKeeper 무기 숨김
 	}
 	
 	// Enhanced Input 매핑 컨텍스트 추가
@@ -204,9 +206,14 @@ void AOverwatchCharacter::Die()
 		FPWeaponMesh->SetVisibility(false);
 	}
 	
-	if (TPWeaponMesh)
+	if (TPWeapon)
 	{
-		TPWeaponMesh->SetVisibility(false);
+		TPWeapon->SetVisibility(false);
+	}
+	
+	if (PeaceKeeperWeapon)
+	{
+		PeaceKeeperWeapon->SetVisibility(false);
 	}
 	
 	// 이벤트 호출 (블루프린트에서 구현)

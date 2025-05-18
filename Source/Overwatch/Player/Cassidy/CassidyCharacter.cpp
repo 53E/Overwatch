@@ -67,10 +67,7 @@ ACassidyCharacter::ACassidyCharacter()
 	// 무기 메시 설정 - 부모 클래스의 FPWeaponMesh를 사용
 	FPWeaponMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
 	FPWeaponMesh->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-    
-    // 3인칭 메시 설정
-    TPWeaponMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
-    TPWeaponMesh->SetRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+	
 }
 
 // 복제할 변수 등록

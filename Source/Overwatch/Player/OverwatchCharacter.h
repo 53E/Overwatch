@@ -47,15 +47,15 @@ protected:
 	UCameraComponent* FirstPersonCamera;
 
 	/** 1인칭 무기 메시 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mesh")
 	USkeletalMeshComponent* FPWeaponMesh;
 	
 	/** 3인칭 무기 메시 (다른 플레이어에게 보이는 메시) */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
-	USkeletalMeshComponent* TPWeaponMesh;
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "Mesh")
+	UChildActorComponent* TPWeapon;
 
 	//피스톨 메시 bp로 받아옴
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mesh")
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category = "Mesh")
 	UChildActorComponent* PeaceKeeperWeapon;
 
 	/** 현재 체력 */
