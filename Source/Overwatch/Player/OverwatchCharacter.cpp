@@ -51,7 +51,8 @@ AOverwatchCharacter::AOverwatchCharacter()
 	
 	// 3인칭 무기 메시 생성 (다른 플레이어에게 보이는 것)
 	TPWeapon = CreateDefaultSubobject<UChildActorComponent>(TEXT("TPWeaponMesh"));
-	TPWeapon->SetupAttachment(GetMesh()); // 캐릭터 메시에 부착
+	//TPWeapon->SetupAttachment(GetMesh()); // 캐릭터 메시에 부착
+	TPWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale,FName("hand_r"));
 
 	GetMesh()->SetOwnerNoSee(true);
 

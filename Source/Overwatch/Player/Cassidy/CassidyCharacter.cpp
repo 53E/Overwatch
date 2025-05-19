@@ -17,7 +17,7 @@
 // 네트워크 관련 헤더
 #include "Net/UnrealNetwork.h"
 #include "Particles/ParticleSystemComponent.h"
-
+#include "PeaceKeeper.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 
@@ -531,6 +531,14 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
 	if (IsLocallyControlled())
 	{
 		Recoil(bIsFanFireShot);
+
+		AActor* ChildActor = PeaceKeeperWeapon->GetChildActor();
+		APeaceKeeper* Pistol = Cast<APeaceKeeper>(ChildActor);
+		if (Pistol)
+		{
+			Pistol->Recoil();
+		}
+		
 	}
 	
     // 발사 애니메이션 재생
@@ -757,6 +765,7 @@ void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 	);
 
 	// 모든 클라이언트에 효과 전파
+	DodgeMontage();
     MulticastPlayDodgeEffects();
 
 	UE_LOG(LogTemp, Log, TEXT("구르기"));

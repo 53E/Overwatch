@@ -255,6 +255,9 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Dodge")
 	void DownCameraOnDodge();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dodge")
+	void DodgeMontage();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Camera")
 	void Recoil(bool bIsFanFire);
 
