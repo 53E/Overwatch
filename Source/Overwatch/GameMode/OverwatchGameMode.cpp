@@ -55,6 +55,7 @@ AOverwatchGameMode::AOverwatchGameMode()
 void AOverwatchGameMode::BeginPlay()
 {
     Super::BeginPlay();
+
     
     // 스폰 포인트 수집
     CollectSpawnPoints();

@@ -10,6 +10,7 @@ class USoundBase;
 class UParticleSystem;
 class UInputAction;
 class UNiagaraSystem;
+class UMaterialInterface;
 
 
 /**
@@ -61,6 +62,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")
 	UNiagaraSystem* BulletTracer;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Effects")
+	UMaterialInterface* BlueCircleDecal;
+	
 	/** 최대 탄창 수 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
 	int32 MaxAmmo;
@@ -225,8 +229,8 @@ protected:
 	void MulticastPlayDodgeEffects_Implementation();
 
 	UFUNCTION(NetMulticast, Reliable)
-	void MulticastPlayTracerEffect(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation);
-	void MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation);
+	void MulticastPlayTracerEffect(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation,bool bHit);
+	void MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& EndLocation, bool bHit);
 	
 	// 구르기 종료 효과를 위한 멀티캐스트 RPC 추가
 	UFUNCTION(NetMulticast, Reliable)

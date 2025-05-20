@@ -20,6 +20,8 @@
 #include "PeaceKeeper.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "Components/DecalComponent.h"
 
 // 생성자
 ACassidyCharacter::ACassidyCharacter()
@@ -409,7 +411,7 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         QueryParams
     );
 
-	MulticastPlayTracerEffect(StartLocation, bHit? HitResult.ImpactPoint : TraceEnd);
+	MulticastPlayTracerEffect(StartLocation, bHit? HitResult.ImpactPoint : TraceEnd, bHit);
 	
     
     // 명중 시 데미지 처리
@@ -732,14 +734,13 @@ void ACassidyCharacter::MulticastPlayDodgeEffects_Implementation()
 }
 
 void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_NetQuantize& StartLocation,
-	const FVector_NetQuantize& EndLocation)
+	const FVector_NetQuantize& EndLocation,bool bHit)
 {
 	UNiagaraComponent* TracerEffect = nullptr;
-	bool bHit = false;
 	FHitResult HitResult;
+	FVector Direction = (EndLocation - StartLocation).GetSafeNormal();
 	if (BulletTracer)
 	{
-		FVector Direction = (EndLocation - StartLocation).GetSafeNormal();
 		float Distance = FVector::Dist(StartLocation, EndLocation);
 
 		FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("Muzzle"));
@@ -761,6 +762,25 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 		TracerEffect->SetAutoDestroy(true);
 	}
 	
+	if (BlueCircleDecal && bHit)
+	{
+		UDecalComponent* HitDecal = UGameplayStatics::SpawnDecalAtLocation(
+		GetWorld(),
+		BlueCircleDecal,
+		FVector(5,5,5),
+		EndLocation,
+		Direction.Rotation(),
+		0.75f
+		);
+
+		if (HitDecal)
+		{
+			//HitDecal->FadeScreenSize = 0.0f; 버그
+			HitDecal->SetFadeScreenSize(0.0f);
+
+			//HitDecal->SetFadeOut(0.75f,1.25,true);
+		}
+	}
 }
 
 // 모든 클라이언트에 구르기 종료 효과 전파
