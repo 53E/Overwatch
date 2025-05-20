@@ -159,13 +159,13 @@ void ACassidyCharacter::FanFire(const FInputActionValue& Value)
     	return;
     }
     
-    // 클라이언트와 서버 모두에서 실행
+    // 서버 
 	bIsFanFiring = true;
 
 	
 	// 남은 총알만큼 연사
 	int32 bulletsToFire = CurrentAmmo;
-	CurrentAmmo = 0; 
+
 	// 나머지 총알 타이머로 발사
 	for (FTimerHandle& Handle : FanFireTimerHandles)
 	{
@@ -174,7 +174,7 @@ void ACassidyCharacter::FanFire(const FInputActionValue& Value)
 	FanFireTimerHandles.Empty();
 	
 	// 즉시 첫 발 발사
-	UE_LOG(LogTemp, Log, TEXT("FanFire: 발사 번호 1"));
+	//UE_LOG(LogTemp, Log, TEXT("FanFire: 발사 번호 1"));
 	FireBullet(true);
 	
 	// 나머지 총알 타이머로 발사
@@ -329,7 +329,7 @@ void ACassidyCharacter::FireWeapon()
 void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
 {
     // 로컬 클라이언트일 경우 (서버가 아닌 경우)
-    if (GetLocalRole() < ROLE_Authority)
+    if (1)//GetLocalRole() < ROLE_Authority)
     {
         // 카메라 정보 가져오기
         FVector CameraLocation;
@@ -347,78 +347,9 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
     }
 	
 	
-    // 서버 측 코드 (리슨 서버 호스트 또는 데디케이티드 서버)
-    
-    // 총알 소모 (제거됨 - ServerFireBullet에서 처리되기 때문에)
-    
-    // 카메라 정보 가져오기
-    FVector CameraLocation;
-    FRotator CameraRotation;
-    GetActorEyesViewPoint(CameraLocation, CameraRotation);
-    
-    // 팬 파이어의 경우 랜덤 각도 적용
-    if (bIsFanFireShot)
-    {
-        // 랜덤 편차 계산
-        float PitchSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-        float YawSpread = FMath::RandRange(-FanFireMaxSpreadAngle, FanFireMaxSpreadAngle);
-        
-        // 원래 회전에 랜덤 편차 추가
-        CameraRotation.Pitch += PitchSpread;
-        CameraRotation.Yaw += YawSpread;
-    }
-    
-    FVector TraceStart = CameraLocation;
-    FVector TraceDirection = CameraRotation.Vector();
-    FVector TraceEnd = TraceStart + (TraceDirection * WeaponRange);
-    
-    // 충돌 쿼리 파라미터 설정
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(this);
-    QueryParams.bTraceComplex = true;
-    
-    // 명중 결과
-    FHitResult HitResult;
-    
-    // 라인 트레이스 실행
-    bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        TraceStart,
-        TraceEnd,
-        ECC_Visibility,
-        QueryParams
-    );
-    
-    // 효과 재생 (모든 클라이언트에 전파) - 발사 위치와 방향 정보 추가
-    MulticastPlayFireEffects(bIsFanFireShot, TraceStart, TraceDirection);
-    
-    // 반동 효과 (로컬 클라이언트에서만)
-    if (IsLocallyControlled())
-    {
-        Recoil(bIsFanFireShot);
-    }
-    
-    //UE_LOG(LogTemp, Log, TEXT("남은 탄환 : %d"), CurrentAmmo);
-    
-    // 트레이서 이펙트 추가
-    MulticastPlayTracerEffect(TraceStart, bHit ? HitResult.ImpactPoint : TraceEnd);
-    
-    // 명중 시 데미지 처리 (서버에서만 수행)
-    if (bHit)
-    {
-        AActor* HitActor = HitResult.GetActor();
-        if (HitActor)
-        {
-            // 데미지 적용 - Hit 함수 호출
-            ServerProcessHit(HitActor, HitResult.ImpactPoint);
-        }
-    }
-    
-    // 총알을 모두 소모했고 팬 파이어가 아니면 자동 재장전
-    if (CurrentAmmo <= 0 && !bIsFanFiring)
-    {
-        StartReload(FInputActionValue());
-    }
+    // 서버 측 코드 
+	
+
 }
 
 // 서버에서 총알 발사 처리
@@ -430,6 +361,7 @@ bool ACassidyCharacter::ServerFireBullet_Validate(const FVector_NetQuantize& Sta
 void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot)
 {
     // 사망, 팬 파이어 중, 재장전 중, 총알 부족이면 발사 불가
+
     if (IsDead() || (bIsFanFireShot == false && bIsFanFiring) || bIsReloading || CurrentAmmo <= 0)
     {
         return;
@@ -477,15 +409,8 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         QueryParams
     );
 
-	MulticastPlayTracerEffect(StartLocation, TraceEnd);
-    
-    /* 서버 로컬 디버그 라인 그리기 (리슨 서버일 경우)
-    if (IsLocallyControlled())
-    {
-        FColor LineColor = bIsFanFireShot ? FColor::Yellow : FColor::Red;
-        DrawDebugLine(GetWorld(), StartLocation, bHit ? HitResult.ImpactPoint : TraceEnd, LineColor, false, 2.0f, 0, 1.0f);
-    }
-	*/
+	MulticastPlayTracerEffect(StartLocation, bHit? HitResult.ImpactPoint : TraceEnd);
+	
     
     // 명중 시 데미지 처리
     if (bHit)
@@ -817,23 +742,7 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 		FVector Direction = (EndLocation - StartLocation).GetSafeNormal();
 		float Distance = FVector::Dist(StartLocation, EndLocation);
 
-		// 충돌 테스트 
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(this);
-		QueryParams.bTraceComplex = true;
-		bHit = GetWorld()->LineTraceSingleByChannel(
-			HitResult,
-			StartLocation,
-			EndLocation,
-			ECC_Visibility,
-			QueryParams
-		);
-
 		FVector MuzzleLocation = FPWeaponMesh->GetSocketLocation(FName("Muzzle"));
-		if (PeaceKeeperWeapon)
-		{
-			
-		}
 		
 		TracerEffect =UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 		GetWorld(),
@@ -847,7 +756,7 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 
 	if (TracerEffect)
 	{
-		TracerEffect->SetVariableVec3(FName("BeamEnd"),bHit? HitResult.ImpactPoint : EndLocation );
+		TracerEffect->SetVariableVec3(FName("BeamEnd"), EndLocation );
 
 		TracerEffect->SetAutoDestroy(true);
 	}
