@@ -592,29 +592,30 @@ void ACassidyCharacter::Flashbang()
     {
         MulticastPlayFlashbangEffects(FlashbangLocation);
         
-        // 범위 내 액터에 섬광 효과 적용
-        TArray<AActor*> OverlappingActors;
-        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), OverlappingActors);
-        
-        for (AActor* Actor : OverlappingActors)
-        {
-            // 자기 자신은 제외
-            if (Actor != this)
-            {
-                // 거리 계산
-                float Distance = FVector::Dist(FlashbangLocation, Actor->GetActorLocation());
-                
-                // 범위 내에 있으면 효과 적용 (이후 구현)
-                if (Distance <= FlashbangRadius)
-                {
-                    // AOverwatchCharacter* OverwatchCharacter = Cast<AOverwatchCharacter>(Actor);
-                    // if (OverwatchCharacter)
-                    // {
-                    //     // 섬광 효과 적용
-                    // }
-                }
-            }
-        }
+		TArray<FOverlapResult> OverlapResults;
+    	FCollisionShape CollisionShape = FCollisionShape::MakeSphere(FlashbangRadius);
+    	FCollisionQueryParams QueryParams;
+    	QueryParams.AddIgnoredActor(this);
+
+    	GetWorld()->OverlapMultiByChannel(
+		OverlapResults,
+		FlashbangLocation,
+		FQuat::Identity,
+		ECC_Visibility,
+		CollisionShape,
+		QueryParams
+    	);
+		
+		for (const FOverlapResult& Result : OverlapResults)
+		{
+			AActor* HitActor = Result.GetActor();
+			if (HitActor)
+			{
+				UE_LOG(LogTemp, Log, TEXT("%s 섬광탄 적용"),*HitActor->GetName());
+			}
+			
+		}
+    	
     }
 }
 
