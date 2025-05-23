@@ -120,21 +120,21 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Recoil")
 	float FanFireRecoilRate;
 
-	/** 발사 입력 액션 */
+	/**입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* FireAction;
-
-	/** 연사 입력 액션 */
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* FanFireAction;
-
-	/** 재장전 입력 액션 */
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* ReloadAction;
-
-	/** 구르기 입력 액션 */
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* DodgeAction;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
+	UInputAction* HighnoonAction;
 
 	/** 섬광탄 이펙트 */
 	UPROPERTY(EditDefaultsOnly, Category = "Effects")
@@ -156,6 +156,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Ability")
 	float FlashbangRadius;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Ability")
+	float HighnoonRadius;
+
 	/** 구르기 속도 */
 	UPROPERTY(EditDefaultsOnly, Category = "Ability")
 	float DodgeSpeed;
@@ -168,6 +171,54 @@ protected:
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ability")
 	bool bDodgingOnCooldown;
 
+	/** 궁극기 게이지 관련 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ultimate")
+	float UltimateCharge;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float MaxUltimateCharge;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float UltimateChargePerSecond;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float UltimateChargePerHit;
+
+	/** Highnoon 활성화 상태 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ultimate")
+	bool bIsHighnoon;
+	
+	/** Highnoon 지속 시간 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float HighnoonDuration;
+	
+	/** Highnoon 타겟팅 시간 (원이 작아지는 시간) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float HighnoonTargetingTime;
+	
+	/** Highnoon 최대 데미지 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ultimate")
+	float HighnoonMaxDamage;
+	
+	/** Highnoon 타겟들 */
+	UPROPERTY(Replicated)
+	TArray<AActor*> HighnoonTargets;
+	
+	/** 각 타겟의 락온 진행도 */
+	TMap<AActor*, float> TargetLockProgress;
+	
+	/** Highnoon 발사 가능 여부 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Ultimate")
+	bool bCanFireHighnoon;
+	
+	/** Highnoon 사운드 */
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	USoundBase* HighnoonActivateSound;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "Sound")
+	USoundBase* HighnoonFireSound;
+	
+	
 	/** 섬광탄 입력 액션 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	UInputAction* FlashbangAction;
@@ -180,12 +231,48 @@ protected:
 	void StartReload(const FInputActionValue& Value);
 	void ThrowFlashbang(const FInputActionValue& Value);
 	void Dodge(const FInputActionValue& Value);
+	void StartHighnoon(const FInputActionValue& Value);
 
 	// 실제 총 발사 로직
 	void FireWeapon();
 	void FireBullet(bool bIsFanFireShot = false);
+
+	// Highnoon 관련 함수들
+	void ActivateHighnoon();
+	void UpdateHighnoon(float DeltaTime);
+	void FireHighnoon();
+	void EndHighnoon();
+	void ChargeUltimate(float Amount);
+	
+	// 클라이언트 RPC
+	UFUNCTION(Client, Reliable)
+	void ClientShowHighnoonUI(const TArray<AActor*>& Targets);
+	void ClientShowHighnoonUI_Implementation(const TArray<AActor*>& Targets);
+	
+	UFUNCTION(Client, Reliable)
+	void ClientUpdateHighnoonUI(float Progress);
+	void ClientUpdateHighnoonUI_Implementation(float Progress);
+	
+	UFUNCTION(Client, Reliable)
+	void ClientHideHighnoonUI();
+	void ClientHideHighnoonUI_Implementation();
 	
 	// 서버 RPC 구현
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerActivateHighnoon();
+	bool ServerActivateHighnoon_Validate();
+	void ServerActivateHighnoon_Implementation();
+	
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerFireHighnoon();
+	bool ServerFireHighnoon_Validate();
+	void ServerFireHighnoon_Implementation();
+	
+	// 멀티캐스트 RPC
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastPlayHighnoonEffects(bool bActivate);
+	void MulticastPlayHighnoonEffects_Implementation(bool bActivate);
+	
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerFireBullet(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot);
 	bool ServerFireBullet_Validate(const FVector_NetQuantize& StartLocation, const FVector_NetQuantize& Direction, bool bIsFanFireShot);
@@ -245,6 +332,7 @@ protected:
 
 	void Flashbang();
 	
+	
 	// 타이머 콜백 함수
 	UFUNCTION()
 	void FinishReload();
@@ -274,14 +362,32 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Fire")
 	void FireSoundEcho();
 	
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ultimate")
+	void ShowHighnoonTargetUI(AActor* Target, float InitialSize);
+	
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ultimate")
+	void UpdateHighnoonTargetUI(AActor* Target, float Progress);
+	
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ultimate")
+	void HideHighnoonTargetUI(AActor* Target);
+	
+	UFUNCTION(BlueprintImplementableEvent, Category = "Ultimate")
+	void OnHighnoonReady();
+	
 
 private:
 	// 타이머 핸들
 	FTimerHandle TimerHandle_Reload;
 	FTimerHandle TimerHandle_FlashbangCooldown;
+	FTimerHandle TimerHandle_HighnoonDuration;
+	FTimerHandle TimerHandle_HighnoonUpdate;
+	
 	//Faanfire 핸들러 배열
 	TArray<FTimerHandle> FanFireTimerHandles;
 	
 	// 섬광탄 위치
 	FVector FlashbangLocation;
+	
+	// Highnoon 시작 시간
+	float HighnoonStartTime;
 };

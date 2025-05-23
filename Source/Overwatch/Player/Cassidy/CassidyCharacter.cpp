@@ -22,6 +22,7 @@
 #include "NiagaraComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Components/DecalComponent.h"
+#include "../OverwatchCharacter.h"
 
 // 생성자
 ACassidyCharacter::ACassidyCharacter()
@@ -46,6 +47,7 @@ ACassidyCharacter::ACassidyCharacter()
 	bIsReloading = false;
 	bIsFanFiring = false;
 	bIsDodging = false;
+	bIsHighnoon = false;
 	FireRate = 0.5f;      // 0.5초마다 발사 가능
 	FanFireRate = 0.15f;  // 연사 발사 속도
 	LastFireTime = 0.0f;
@@ -62,9 +64,22 @@ ACassidyCharacter::ACassidyCharacter()
 	DodgeSpeed = 2100.0f;
 	DodgeCooldown = 2.0f;
 	FlashbangCooldown = 2.0f;
+	
 	bFlashbangOnCooldown = false;
 	bDodgingOnCooldown = false;
 	FlashbangRadius = 130.0f; // 폭발 범위
+	HighnoonRadius = 10000.0f;
+	
+	// 궁극기 관련 설정
+	UltimateCharge = 0.0f;
+	MaxUltimateCharge = 100.0f;
+	UltimateChargePerSecond = 100.0f; // 초당 1% 충전
+	UltimateChargePerHit = 5.0f; // 명중 시 5% 충전
+	bIsHighnoon = false;
+	bCanFireHighnoon = false;
+	HighnoonDuration = 6.0f; // 6초 지속
+	HighnoonTargetingTime = 3.0f; // 원이 작아지는 시간
+	HighnoonMaxDamage = 999.0f; // 최대 데미지
 	
 	// 무기 메시 설정 - 부모 클래스의 FPWeaponMesh를 사용
 	FPWeaponMesh->SetRelativeLocation(FVector(20.0f, 10.0f, -10.0f));
@@ -84,6 +99,10 @@ void ACassidyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ACassidyCharacter, bIsDodging);
     DOREPLIFETIME(ACassidyCharacter, bFlashbangOnCooldown);
     DOREPLIFETIME(ACassidyCharacter, bDodgingOnCooldown);
+    DOREPLIFETIME(ACassidyCharacter, UltimateCharge);
+    DOREPLIFETIME(ACassidyCharacter, bIsHighnoon);
+    DOREPLIFETIME(ACassidyCharacter, bCanFireHighnoon);
+    DOREPLIFETIME(ACassidyCharacter, HighnoonTargets);
 }
 
 // 게임 시작시 호출
@@ -99,6 +118,22 @@ void ACassidyCharacter::BeginPlay()
 void ACassidyCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+	
+	// 서버에서만 처리
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		// 살아있고 Highnoon이 아닐 때만 궁극기 충전
+		if (!IsDead() && !bIsHighnoon && UltimateCharge < MaxUltimateCharge)
+		{
+			ChargeUltimate(UltimateChargePerSecond * DeltaTime);
+		}
+		
+		// Highnoon 활성화 중
+		if (bIsHighnoon)
+		{
+			UpdateHighnoon(DeltaTime);
+		}
+	}
 }
 
 // 입력 바인딩
@@ -123,6 +158,7 @@ void ACassidyCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		EnhancedInputComponent->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::StartReload);
 		EnhancedInputComponent->BindAction(FlashbangAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::ThrowFlashbang);
 		EnhancedInputComponent->BindAction(DodgeAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::Dodge);
+		EnhancedInputComponent->BindAction(HighnoonAction, ETriggerEvent::Triggered, this, &ACassidyCharacter::StartHighnoon);
 	}
 }
 
@@ -131,7 +167,15 @@ void ACassidyCharacter::StartFire(const FInputActionValue& Value)
 {
 	if (!IsDead())
 	{
-		FireWeapon();
+		// Highnoon 중일 때 처리
+		if (bIsHighnoon && bCanFireHighnoon)
+		{
+			FireHighnoon();
+		}
+		else if (!bIsHighnoon)
+		{
+			FireWeapon();
+		}
 	}
 }
 
@@ -144,8 +188,8 @@ void ACassidyCharacter::StopFire(const FInputActionValue& Value)
 // 우클릭 연사 (Enhanced Input)
 void ACassidyCharacter::FanFire(const FInputActionValue& Value)
 {
-	// 사망, 재장전 중, 탄약 부족, 팬 파이어 중, 구르기 중이면 발사 불가
-	if (IsDead() || bIsReloading || CurrentAmmo <= 0 || bIsFanFiring || bIsDodging)
+	// 사망, 재장전 중, 탄약 부족, 팬 파이어 중, 구르기 중, Highnoon 중이면 발사 불가
+	if (IsDead() || bIsReloading || CurrentAmmo <= 0 || bIsFanFiring || bIsDodging || bIsHighnoon)
 	{
 		return;
 	}
@@ -229,8 +273,8 @@ void ACassidyCharacter::ServerFanFire_Implementation()
 // 재장전 시작 (Enhanced Input)
 void ACassidyCharacter::StartReload(const FInputActionValue& Value)
 {
-	// 사망, 최대 탄약, 재장전 중, 팬 파이어 중이면 리턴
-	if (IsDead() || CurrentAmmo == MaxAmmo || bIsReloading || bIsFanFiring)
+	// 사망, 최대 탄약, 재장전 중, 팬 파이어 중, Highnoon 중이면 리턴
+	if (IsDead() || CurrentAmmo == MaxAmmo || bIsReloading || bIsFanFiring || bIsHighnoon)
 	{
 		return;
 	}
@@ -303,11 +347,11 @@ void ACassidyCharacter::FinishReload()
 // 무기 발사 처리
 void ACassidyCharacter::FireWeapon()
 {
-	// 사망, 팬 파이어 중, 재장전 중, 총알 부족이면 발사 불가
-	if (IsDead() || bIsFanFiring || bIsReloading || CurrentAmmo <= 0)
+	// 사망, 팬 파이어 중, 재장전 중, 총알 부족, Highnoon 중이면 발사 불가
+	if (IsDead() || bIsFanFiring || bIsReloading || CurrentAmmo <= 0 || bIsHighnoon)
 	{
 		// 총알이 없고 재장전 중이 아니면 자동 재장전
-		if (CurrentAmmo <= 0 && !bIsReloading && !bIsFanFiring)
+		if (CurrentAmmo <= 0 && !bIsReloading && !bIsFanFiring && !bIsHighnoon)
 		{
 			StartReload(FInputActionValue());
 		}
@@ -352,6 +396,265 @@ void ACassidyCharacter::FireBullet(bool bIsFanFireShot)
     // 서버 측 코드 
 	
 
+}
+
+// 궁극기 충전 함수
+void ACassidyCharacter::ChargeUltimate(float Amount)
+{
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		float OldCharge = UltimateCharge;
+		UltimateCharge = FMath::Clamp(UltimateCharge + Amount, 0.0f, MaxUltimateCharge);
+		
+		// 궁극기가 충전 완료되면 알림
+		if (OldCharge < MaxUltimateCharge && UltimateCharge >= MaxUltimateCharge)
+		{
+			if (IsLocallyControlled())
+			{
+				OnHighnoonReady();
+			}
+		}
+	}
+}
+
+// Highnoon 활성화 함수
+void ACassidyCharacter::ActivateHighnoon()
+{
+	if (IsLocallyControlled())
+	{
+		UE_LOG(LogTemp, Log, TEXT("Activating Highnoon..."));
+		ServerActivateHighnoon();
+	}
+}
+
+// Highnoon 업데이트 (서버에서만)
+void ACassidyCharacter::UpdateHighnoon(float DeltaTime)
+{
+	if (!bIsHighnoon || GetLocalRole() != ROLE_Authority)
+		return;
+	
+	float CurrentTime = GetWorld()->GetTimeSeconds();
+	float ElapsedTime = CurrentTime - HighnoonStartTime;
+	float LockProgress = FMath::Clamp(ElapsedTime / HighnoonTargetingTime, 0.0f, 1.0f);
+	
+	// 모든 타겟의 락온 진행도 업데이트
+	bool bAllTargetsLocked = true;
+	for (AActor* Target : HighnoonTargets)
+	{
+		if (Target && !Target->IsPendingKillPending())
+		{
+			TargetLockProgress.Add(Target, LockProgress);
+			if (LockProgress < 1.0f)
+			{
+				bAllTargetsLocked = false;
+			}
+		}
+	}
+	
+	// 클라이언트에 UI 업데이트 알림 do once
+	ClientUpdateHighnoonUI(LockProgress);
+	
+	// 모든 타겟이 락온되면 발사 가능
+	if (bAllTargetsLocked && !bCanFireHighnoon)
+	{
+		bCanFireHighnoon = true;
+		UE_LOG(LogTemp, Log, TEXT("Highnoon ready to fire!"));
+	}
+}
+
+// Highnoon 발사
+void ACassidyCharacter::FireHighnoon()
+{
+	if (!bIsHighnoon || !bCanFireHighnoon)
+		return;
+	
+	if (IsLocallyControlled())
+	{
+		ServerFireHighnoon();
+	}
+}
+
+// Highnoon 종료
+void ACassidyCharacter::EndHighnoon()
+{
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		bIsHighnoon = false;
+		bCanFireHighnoon = false;
+		HighnoonTargets.Empty();
+		TargetLockProgress.Empty();
+		UltimateCharge = 0.0f; // 궁극기 사용 후 초기화
+		
+		// 타이머 해제
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_HighnoonDuration);
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_HighnoonUpdate);
+		
+		// 효과 중단
+		MulticastPlayHighnoonEffects(false);
+		
+		// UI 숨기기
+		ClientHideHighnoonUI();
+	}
+}
+
+// 클라이언트 UI RPC
+void ACassidyCharacter::ClientShowHighnoonUI_Implementation(const TArray<AActor*>& Targets)
+{
+	for (AActor* Target : Targets)
+	{
+		if (Target)
+		{
+			ShowHighnoonTargetUI(Target, 200.0f); // 초기 크기 200
+		}
+	}
+}
+
+void ACassidyCharacter::ClientUpdateHighnoonUI_Implementation(float Progress)
+{
+	for (AActor* Target : HighnoonTargets)
+	{
+		if (Target)
+		{
+			UpdateHighnoonTargetUI(Target, Progress);
+		}
+	}
+}
+
+void ACassidyCharacter::ClientHideHighnoonUI_Implementation()
+{
+	for (AActor* Target : HighnoonTargets)
+	{
+		if (Target)
+		{
+			HideHighnoonTargetUI(Target);
+		}
+	}
+}
+
+// 서버 RPC
+bool ACassidyCharacter::ServerActivateHighnoon_Validate()
+{
+	return true;
+}
+
+void ACassidyCharacter::ServerActivateHighnoon_Implementation()
+{
+	// 궁극기 사용 가능 여부 확인
+	if (!IsDead() && UltimateCharge >= MaxUltimateCharge && !bIsHighnoon)
+	{
+		bIsHighnoon = true;
+		bCanFireHighnoon = false;
+		HighnoonStartTime = GetWorld()->GetTimeSeconds();
+		
+		// 현재 위치에서 범위 내 적 찾기
+		FVector Location = GetActorLocation();
+		TArray<FOverlapResult> OverlapResults;
+		FCollisionShape CollisionShape = FCollisionShape::MakeSphere(HighnoonRadius);
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this);
+		
+		GetWorld()->OverlapMultiByChannel(
+			OverlapResults,
+			Location,
+			FQuat::Identity,
+			ECC_Visibility,
+			CollisionShape,
+			QueryParams
+		);
+
+		// 시야에 있는 적만 타겟으로 추가
+		for (const FOverlapResult& Result : OverlapResults)
+		{
+			AOverwatchCharacter* Target = Cast<AOverwatchCharacter>(Result.GetActor());
+			if (Target && Target != this && !Target->IsDead())
+			{
+				// 시야 체크
+				FVector DirectionToTarget = (Target->GetActorLocation() - Location).GetSafeNormal();
+				FVector ForwardVector = GetActorForwardVector();
+				float DotProduct = FVector::DotProduct(ForwardVector, DirectionToTarget);
+				
+				// 전방 90도 범위 내에 있는 적만 타겟으로
+				if (DotProduct > 0.0f)
+				{
+					HighnoonTargets.Add(Target);
+				}
+			}
+		}
+		
+		// 효과 재생
+		MulticastPlayHighnoonEffects(true);
+		
+		// UI 표시
+		ClientShowHighnoonUI(HighnoonTargets);
+		
+		// 지속 시간 타이머
+		GetWorld()->GetTimerManager().SetTimer(
+			TimerHandle_HighnoonDuration,
+			this,
+			&ACassidyCharacter::EndHighnoon,
+			HighnoonDuration,
+			false
+		);
+		
+		UE_LOG(LogTemp, Log, TEXT("Highnoon activated with %d targets"), HighnoonTargets.Num());
+	}
+}
+
+bool ACassidyCharacter::ServerFireHighnoon_Validate()
+{
+	return true;
+}
+
+void ACassidyCharacter::ServerFireHighnoon_Implementation()
+{
+	if (!bIsHighnoon || !bCanFireHighnoon)
+		return;
+	
+	// 모든 락온된 타겟에게 데미지
+	for (AActor* Target : HighnoonTargets)
+	{
+		AOverwatchCharacter* OverwatchTarget = Cast<AOverwatchCharacter>(Target);
+		if (OverwatchTarget && !OverwatchTarget->IsDead())
+		{
+			// 즉사 데미지
+			OverwatchTarget->Hit(HighnoonMaxDamage, this);
+			UE_LOG(LogTemp, Log, TEXT("하이눈 발사"));
+			
+			// 탄환 효과
+			FVector StartLocation = GetActorLocation();
+			FVector EndLocation = OverwatchTarget->GetActorLocation();
+			MulticastPlayTracerEffect(StartLocation, EndLocation, true);
+		}
+	}
+	
+	// 발사 사운드
+	if (HighnoonFireSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, HighnoonFireSound, GetActorLocation());
+	}
+	
+	// Highnoon 종료
+	EndHighnoon();
+}
+
+// 멀티캐스트 RPC
+void ACassidyCharacter::MulticastPlayHighnoonEffects_Implementation(bool bActivate)
+{
+	if (bActivate)
+	{
+		// Highnoon 활성화 사운드
+		if (HighnoonActivateSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, HighnoonActivateSound, GetActorLocation());
+		}
+		
+		// 캡슐 컬리전 업데이트 (필요한 경우)
+		// GetCapsuleComponent()->SetCollisionResponseToChannel(...);
+	}
+	else
+	{
+		// 효과 종료
+	}
 }
 
 // 서버에서 총알 발사 처리
@@ -447,6 +750,9 @@ void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const 
         if (OverwatchCharacter)
         {
             OverwatchCharacter->Hit(WeaponDamage, this);
+            
+            // 명중 시 궁극기 충전
+            ChargeUltimate(UltimateChargePerHit);
         }
     }
 }
@@ -522,8 +828,8 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
 // 섬광탄 던지기
 void ACassidyCharacter::ThrowFlashbang(const FInputActionValue& Value)
 {
-	// 사망, 쿨타임 중, 팬 파이어 중, 재장전 중, 구르기 중이면 사용 불가
-	if (IsDead() || bFlashbangOnCooldown || bIsFanFiring || bIsReloading || bIsDodging)
+	// 사망, 쿨타임 중, 팬 파이어 중, 재장전 중, 구르기 중, Highnoon 중이면 사용 불가
+	if (IsDead() || bFlashbangOnCooldown || bIsFanFiring || bIsReloading || bIsDodging || bIsHighnoon)
 	{
 		return;
 	}
@@ -648,8 +954,8 @@ void ACassidyCharacter::FinishFlashbangCooldown()
 // 구르기 입력 처리
 void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 {
-	// 사망, 구르기 중, 쿨타임 중, 팬 파이어 중이면 불가
-	if (IsDead() || bIsDodging || bDodgingOnCooldown || bIsFanFiring)
+	// 사망, 구르기 중, 쿨타임 중, 팬 파이어 중, Highnoon 중이면 불가
+	if (IsDead() || bIsDodging || bDodgingOnCooldown || bIsFanFiring || bIsHighnoon)
 	{
 		return;
 	}
@@ -697,6 +1003,14 @@ void ACassidyCharacter::Dodge(const FInputActionValue& Value)
     MulticastPlayDodgeEffects();
 
 	UE_LOG(LogTemp, Log, TEXT("구르기"));
+}
+
+void ACassidyCharacter::StartHighnoon(const FInputActionValue& Value)
+{
+	if (!IsDead() && !bIsReloading && !bIsDodging && !bIsFanFiring && UltimateCharge >= MaxUltimateCharge && !bIsHighnoon)
+	{
+		ActivateHighnoon();
+	}
 }
 
 // 서버에서 구르기 처리
