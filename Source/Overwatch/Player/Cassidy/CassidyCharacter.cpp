@@ -769,7 +769,7 @@ void ACassidyCharacter::MulticastPlayFireEffects_Implementation(bool bIsFanFireS
 		APeaceKeeper* Pistol = Cast<APeaceKeeper>(ChildActor);
 		if (Pistol)
 		{
-			Pistol->Recoil();
+			Pistol->Recoil(bIsFanFireShot);
 		}
 		
 	}

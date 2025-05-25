@@ -16,7 +16,7 @@ public:
 	APeaceKeeper();
 
 	UFUNCTION(BlueprintImplementableEvent , Category = "PeaceKeeper")
-	void Recoil();
+	void Recoil(bool bIsFanFire);
 
 protected:
 	// Called when the game starts or when spawned
