@@ -256,6 +256,10 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientHideHighnoonUI();
 	void ClientHideHighnoonUI_Implementation();
+
+	UFUNCTION(Client, Reliable)
+	void ClientShowHitUI();
+	void ClientShowHitUI_Implementation();
 	
 	// 서버 RPC 구현
 	UFUNCTION(Server, Reliable, WithValidation)
@@ -359,6 +363,9 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
 	void StopFanFireUI();
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
+	void HitUI();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Fire")
 	void FireSoundEcho();
 	
@@ -373,8 +380,13 @@ protected:
 	
 	UFUNCTION(BlueprintImplementableEvent, Category = "Ultimate")
 	void OnHighnoonReady();
-	
 
+	UFUNCTION(Client ,Unreliable, Category = "Sound")
+	void PlayHighnoonFireSound();
+	void PlayHighnoonFireSound_Implementation();
+
+	
+	
 private:
 	// 타이머 핸들
 	FTimerHandle TimerHandle_Reload;
@@ -384,6 +396,8 @@ private:
 	
 	//Faanfire 핸들러 배열
 	TArray<FTimerHandle> FanFireTimerHandles;
+	UPROPERTY()
+	TArray<FTimerHandle> HighnoonTimerHandles;
 	
 	// 섬광탄 위치
 	FVector FlashbangLocation;

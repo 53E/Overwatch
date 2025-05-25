@@ -493,7 +493,7 @@ void ACassidyCharacter::EndHighnoon()
 		MulticastPlayHighnoonEffects(false);
 		
 		// UI 숨기기
-		ClientHideHighnoonUI();
+		//ClientHideHighnoonUI();
 	}
 }
 
@@ -529,6 +529,11 @@ void ACassidyCharacter::ClientHideHighnoonUI_Implementation()
 			HideHighnoonTargetUI(Target);
 		}
 	}
+}
+
+void ACassidyCharacter::ClientShowHitUI_Implementation()
+{
+	HitUI();
 }
 
 // 서버 RPC
@@ -610,31 +615,72 @@ void ACassidyCharacter::ServerFireHighnoon_Implementation()
 	if (!bIsHighnoon || !bCanFireHighnoon)
 		return;
 	
-	// 모든 락온된 타겟에게 데미지
-	for (AActor* Target : HighnoonTargets)
-	{
-		AOverwatchCharacter* OverwatchTarget = Cast<AOverwatchCharacter>(Target);
-		if (OverwatchTarget && !OverwatchTarget->IsDead())
-		{
-			// 즉사 데미지
-			OverwatchTarget->Hit(HighnoonMaxDamage, this);
-			UE_LOG(LogTemp, Log, TEXT("하이눈 발사"));
-			
-			// 탄환 효과
-			FVector StartLocation = GetActorLocation();
-			FVector EndLocation = OverwatchTarget->GetActorLocation();
-			MulticastPlayTracerEffect(StartLocation, EndLocation, true);
-		}
-	}
+
+	TArray<AActor*> TargetsCopy = HighnoonTargets;
+    TWeakObjectPtr<ACassidyCharacter> WeakThis = this;
+    
+    for (int32 i = 0; i < TargetsCopy.Num(); i++)
+    {
+        // 타이머 핸들을 멤버 배열에 저장
+        FTimerHandle* TimerHandle = &HighnoonTimerHandles.AddDefaulted_GetRef();
+        
+        GetWorld()->GetTimerManager().SetTimer(
+            *TimerHandle,
+            [WeakThis, TargetsCopy, i]()
+            {
+                // 객체 유효성 검사
+                if (!WeakThis.IsValid()) return;
+                
+                ACassidyCharacter* StrongThis = WeakThis.Get();
+                if (i >= TargetsCopy.Num()) return;
+                
+                AOverwatchCharacter* OverwatchTarget = Cast<AOverwatchCharacter>(TargetsCopy[i]);
+                if (OverwatchTarget && !OverwatchTarget->IsDead())
+                {
+                    // 즉사 데미지
+                    OverwatchTarget->Hit(StrongThis->HighnoonMaxDamage, StrongThis);
+                    UE_LOG(LogTemp, Log, TEXT("하이눈 발사"));
+                    
+                    // 무기 반동
+                    AActor* ChildActor = StrongThis->PeaceKeeperWeapon->GetChildActor();
+                    APeaceKeeper* Pistol = Cast<APeaceKeeper>(ChildActor);
+                    if (Pistol)
+                    {
+                        Pistol->Recoil(true);
+                    }
+                    
+                    // 발사 사운드
+                    if (StrongThis->HighnoonFireSound)
+                    {
+                    	StrongThis->PlayHighnoonFireSound();
+                    }
+                    
+                    // 탄환 효과
+                    FVector StartLocation = StrongThis->GetActorLocation();
+                    FVector EndLocation = OverwatchTarget->GetActorLocation();
+                    StrongThis->MulticastPlayTracerEffect(StartLocation, EndLocation, true);
+                }
+            },
+            0.2f * i + 0.01f,
+            false
+        );
+    }
+		
 	
-	// 발사 사운드
-	if (HighnoonFireSound)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, HighnoonFireSound, GetActorLocation());
-	}
+	
+	LastFireTime = GetWorld()->GetTimeSeconds();
 	
 	// Highnoon 종료
-	EndHighnoon();
+	//EndHighnoon();
+	ClientHideHighnoonUI();
+	FTimerHandle EndTimerHandler;
+	GetWorld()->GetTimerManager().SetTimer(
+		EndTimerHandler,
+		this,
+		&ACassidyCharacter::EndHighnoon,
+		1.0f,
+		false
+	);
 }
 
 // 멀티캐스트 RPC
@@ -743,6 +789,8 @@ bool ACassidyCharacter::ServerProcessHit_Validate(AActor* HitActor, const FVecto
 
 void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const FVector_NetQuantize& HitLocation)
 {
+	ClientShowHitUI();
+	
     if (HitActor && !IsDead() && GetLocalRole() == ROLE_Authority)
     {
         // hit 함수를 사용하도록 수정된 코드
@@ -951,6 +999,11 @@ void ACassidyCharacter::FinishFlashbangCooldown()
 	UE_LOG(LogTemp, Log, TEXT("섬광탄 쿨타임 완료"));
 }
 
+void ACassidyCharacter::PlayHighnoonFireSound_Implementation()
+{
+	UGameplayStatics::PlaySoundAtLocation(this,HighnoonFireSound, GetActorLocation());
+}
+
 // 구르기 입력 처리
 void ACassidyCharacter::Dodge(const FInputActionValue& Value)
 {
@@ -1085,7 +1138,7 @@ void ACassidyCharacter::MulticastPlayTracerEffect_Implementation(const FVector_N
 		FVector(5,5,5),
 		EndLocation,
 		Direction.Rotation(),
-		0.75f
+		1.0f
 		);
 
 		if (HitDecal)
