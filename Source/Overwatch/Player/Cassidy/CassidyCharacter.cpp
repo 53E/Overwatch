@@ -531,9 +531,9 @@ void ACassidyCharacter::ClientHideHighnoonUI_Implementation()
 	}
 }
 
-void ACassidyCharacter::ClientShowHitUI_Implementation()
+void ACassidyCharacter::ClientShowHitUI_Implementation(bool IsHead)
 {
-	HitUI();
+	HitUI(IsHead);
 }
 
 // 서버 RPC
@@ -562,7 +562,7 @@ void ACassidyCharacter::ServerActivateHighnoon_Implementation()
 			OverlapResults,
 			Location,
 			FQuat::Identity,
-			ECC_Visibility,
+			ECC_Camera,
 			CollisionShape,
 			QueryParams
 		);
@@ -585,7 +585,7 @@ void ACassidyCharacter::ServerActivateHighnoon_Implementation()
 				}
 			}
 		}
-		
+		HighnoonTargets = TSet<AActor*>(HighnoonTargets).Array();
 		// 효과 재생
 		MulticastPlayHighnoonEffects(true);
 		
@@ -747,6 +747,7 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(this);
     QueryParams.bTraceComplex = true;
+	QueryParams.bReturnPhysicalMaterial = true;
     
     // 명중 결과
     FHitResult HitResult;
@@ -756,11 +757,17 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         HitResult,
         StartLocation,
         TraceEnd,
-        ECC_Visibility,
+        ECC_Camera,
         QueryParams
     );
+	bool hitChar = bHit;
+	if ( Cast<AOverwatchCharacter>(HitResult.GetActor()) )
+		hitChar = true;
+	else
+		hitChar = false;
 
-	MulticastPlayTracerEffect(StartLocation, bHit? HitResult.ImpactPoint : TraceEnd, bHit);
+	
+	MulticastPlayTracerEffect(StartLocation, bHit? HitResult.ImpactPoint : TraceEnd, !hitChar);
 	
     
     // 명중 시 데미지 처리
@@ -770,7 +777,7 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
         if (HitActor)
         {
             // 데미지 적용 - Hit 함수 호출
-            ServerProcessHit(HitActor, HitResult.ImpactPoint);
+            ServerProcessHit(HitActor, HitResult);
         }
     }
     
@@ -782,14 +789,14 @@ void ACassidyCharacter::ServerFireBullet_Implementation(const FVector_NetQuantiz
 }
 
 // 서버에서 히트 처리
-bool ACassidyCharacter::ServerProcessHit_Validate(AActor* HitActor, const FVector_NetQuantize& HitLocation)
+bool ACassidyCharacter::ServerProcessHit_Validate(AActor* HitActor, const FHitResult& HitResult)
 {
     return true;
 }
 
-void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const FVector_NetQuantize& HitLocation)
+void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor,const FHitResult& HitResult)
 {
-	ClientShowHitUI();
+
 	
     if (HitActor && !IsDead() && GetLocalRole() == ROLE_Authority)
     {
@@ -797,8 +804,18 @@ void ACassidyCharacter::ServerProcessHit_Implementation(AActor* HitActor, const 
         AOverwatchCharacter* OverwatchCharacter = Cast<AOverwatchCharacter>(HitActor);
         if (OverwatchCharacter)
         {
-            OverwatchCharacter->Hit(WeaponDamage, this);
-            
+        	
+			if (HitResult.PhysMaterial->SurfaceType == SurfaceType1)
+			{
+				ClientShowHitUI(true);
+				OverwatchCharacter->Hit(WeaponDamage, this);
+			}
+			else
+			{
+				ClientShowHitUI(false);
+				OverwatchCharacter->Hit(WeaponDamage, this);
+			}
+        	
             // 명중 시 궁극기 충전
             ChargeUltimate(UltimateChargePerHit);
         }
@@ -955,7 +972,7 @@ void ACassidyCharacter::Flashbang()
 		OverlapResults,
 		FlashbangLocation,
 		FQuat::Identity,
-		ECC_Visibility,
+		ECC_Camera,
 		CollisionShape,
 		QueryParams
     	);

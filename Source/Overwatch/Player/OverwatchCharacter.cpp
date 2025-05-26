@@ -10,6 +10,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "TimerManager.h"
 #include "Net/UnrealNetwork.h"
+#include "DeathComponent.h"
+#include "../GameMode/OverwatchGameMode.h"
 
 // 네트워크 복제 설정
 void AOverwatchCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -55,6 +57,9 @@ AOverwatchCharacter::AOverwatchCharacter()
 	TPWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale,FName("hand_r"));
 
 	GetMesh()->SetOwnerNoSee(true);
+	
+	// 죽음 처리 컴포넌트 생성
+	DeathComponent = CreateDefaultSubobject<UDeathComponent>(TEXT("DeathComponent"));
 
 	// 체력 초기화
 	MaxHealth = 200.0f;
@@ -179,7 +184,7 @@ float AOverwatchCharacter::Hit(float DamageAmount, AActor* DamageCauser)
 		CurrentHealth = FMath::Max(0.0f, CurrentHealth - ActualDamage);
 		if (CurrentHealth <= 0)
 		{
-			Die();
+			Die(DamageCauser);
 		}
 	}
 	
@@ -190,18 +195,21 @@ float AOverwatchCharacter::Hit(float DamageAmount, AActor* DamageCauser)
 }
 
 
-void AOverwatchCharacter::Die()
+void AOverwatchCharacter::Die(AActor* Killer)
 {
+	// 서버에서만 죽음 처리 시작
+	if (GetLocalRole() != ROLE_Authority)
+		return;
+		
 	if (bIsDead)
 		return;
 		
 	bIsDead = true;
+	UE_LOG(LogTemp, Warning, TEXT("Dead!"));
+
+
 	
-	// 모든 움직임 중지
-	GetCharacterMovement()->StopMovementImmediately();
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	
-	// 무기 숨기기
+	//무기 숨기기
 	if (FPWeaponMesh)
 	{
 		FPWeaponMesh->SetVisibility(false);
@@ -217,10 +225,33 @@ void AOverwatchCharacter::Die()
 		PeaceKeeperWeapon->SetVisibility(false);
 	}
 	
+	// DeathComponent를 통한 래그돌 처리
+	if (DeathComponent)
+	{
+		DeathComponent->HandleDeath(this, Killer);
+	}
+	else
+	{
+		// DeathComponent가 없는 경우 기본 처리
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	}
+	
 	// 이벤트 호출 (블루프린트에서 구현)
 	OnDeath();
 	
-	// 일정 시간 후 리스폰 처리는 게임모드에서 관리
+	/* 게임모드에 죽음 알림
+	if (Controller)
+	{
+		AOverwatchGameMode* GameMode = GetWorld()->GetAuthGameMode<AOverwatchGameMode>();
+		if (GameMode)
+		{
+			GameMode->RespawnPlayer(Controller);
+		}
+	}
+	*/
 }
 
 void AOverwatchCharacter::Heal(float HealAmount)

@@ -12,6 +12,7 @@ class UAnimMontage;
 class USoundBase;
 class UInputMappingContext;
 class UInputAction;
+class UDeathComponent;
 
 /**
  * 오버워치 캐릭터 베이스 클래스
@@ -31,11 +32,12 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
-	float Hit(float DamageAmount, AActor* DamageCauser);
+	virtual float Hit(float DamageAmount, AActor* DamageCauser);
 
 	/** 캐릭터 사망 처리 */
 	UFUNCTION(BlueprintCallable, Category = "Health")
-	virtual void Die();
+	virtual void Die(AActor* Killer = nullptr);
+
 	
 	/** 체력 회복 처리 */
 	UFUNCTION(BlueprintCallable, Category = "Health")
@@ -112,6 +114,10 @@ protected:
 
 	// 쉴드 재생 타이머
 	FTimerHandle TimerHandle_ShieldRegen;
+	
+	/** 죽음 처리 컴포넌트 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UDeathComponent* DeathComponent;
 
 protected:
 	// 체력 및 쉴드 관련 함수
@@ -138,4 +144,7 @@ public:
 	// 사망 이벤트 (블루프린트에서 구현 가능)
 	UFUNCTION(BlueprintImplementableEvent, Category = "Health")
 	void OnDeath();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dummy")
+	void EventDead();
 };

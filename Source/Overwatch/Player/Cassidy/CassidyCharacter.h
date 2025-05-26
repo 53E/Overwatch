@@ -258,8 +258,8 @@ protected:
 	void ClientHideHighnoonUI_Implementation();
 
 	UFUNCTION(Client, Reliable)
-	void ClientShowHitUI();
-	void ClientShowHitUI_Implementation();
+	void ClientShowHitUI(bool IsHead);
+	void ClientShowHitUI_Implementation(bool IsHead);
 	
 	// 서버 RPC 구현
 	UFUNCTION(Server, Reliable, WithValidation)
@@ -330,9 +330,9 @@ protected:
 	
 	// 히트 처리
 	UFUNCTION(Server, Reliable, WithValidation)
-	void ServerProcessHit(AActor* HitActor, const FVector_NetQuantize& HitLocation);
-	bool ServerProcessHit_Validate(AActor* HitActor, const FVector_NetQuantize& HitLocation);
-	void ServerProcessHit_Implementation(AActor* HitActor, const FVector_NetQuantize& HitLocation);
+	void ServerProcessHit(AActor* HitActor, const FHitResult& Hit);
+	bool ServerProcessHit_Validate(AActor* HitActor,const FHitResult& Hit);
+	void ServerProcessHit_Implementation(AActor* HitActor, const FHitResult& Hit);
 
 	void Flashbang();
 	
@@ -364,7 +364,7 @@ protected:
 	void StopFanFireUI();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "UI")
-	void HitUI();
+	void HitUI(bool IsHead);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Fire")
 	void FireSoundEcho();
