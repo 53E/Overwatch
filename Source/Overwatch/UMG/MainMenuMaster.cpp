@@ -3,6 +3,9 @@
 
 #include "MainMenuMaster.h"
 #include "OutGameUI.h"
+#include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 
 void UMainMenuMaster::NativeConstruct()
 {
@@ -16,6 +19,30 @@ void UMainMenuMaster::NativeConstruct()
 	ContentSwitcher->SetActiveWidget(ScreenWidgets[CurrentScreen]);*/
     SwitchToScreen(EMenuScreen::MainMenu);
     OnScreenChanged(CurrentScreen);
+}
+
+void UMainMenuMaster::PlayLobbySound(USoundBase* LobbySound)
+{
+	if (LobbySound)
+	{
+		UAudioComponent* AudioComponent = UGameplayStatics::SpawnSound2D(this, LobbySound);
+		
+		if (AudioComponent)
+		{
+			LobbyAudioComp = AudioComponent;
+			AudioComponent->bAutoDestroy = true; // 사운드 끝나면 자동 제거
+			AudioComponent->SetVolumeMultiplier(0.8f); // 볼륨 조절
+			AudioComponent->SetPitchMultiplier(1.0f);  // 피치 조절
+		}
+	}
+}
+
+void UMainMenuMaster::StopLobbySound()
+{
+	if (LobbyAudioComp)
+	{
+		LobbyAudioComp->Stop();
+	}
 }
 
 void UMainMenuMaster::SwitchToScreen(EMenuScreen Screen)

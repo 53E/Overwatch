@@ -79,7 +79,7 @@ AOverwatchCharacter::AOverwatchCharacter()
 void AOverwatchCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	// 초기화
 	CurrentHealth = MaxHealth;
 	Shield = MaxShield;

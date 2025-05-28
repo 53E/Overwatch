@@ -3,6 +3,7 @@
 
 
 #include "OutGameUI.h"
+#include "Sound/SoundBase.h"
 
 void UOutGameUI::SwitchToScreen(EMenuScreen Screen)
 {
@@ -10,5 +11,26 @@ void UOutGameUI::SwitchToScreen(EMenuScreen Screen)
 	{
 		MasterMenu->SwitchToScreen(Screen);
 	}
+}
 
+void UOutGameUI::PlayLobbySound(USoundBase* LobbySound)
+{
+	if (MasterMenu)
+	{
+		MasterMenu->PlayLobbySound(LobbySound);
+	}
+}
+
+void UOutGameUI::StopLobbySound()
+{
+	if (MasterMenu)
+	{
+		MasterMenu->StopLobbySound();
+	}
+}
+
+
+void UOutGameUI::TravelTrainingRoom_Implementation()
+{
+	GetWorld()->ServerTravel(TEXT("/Game/Overwatch/Level/TrainingRoom?listen"));
 }

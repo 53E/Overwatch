@@ -9,6 +9,7 @@
 /**
  * 
  */
+class USoundBase;
 
 UCLASS()
 class OVERWATCH_API UOutGameUI : public UUserWidget
@@ -23,4 +24,15 @@ protected:
 
 	UFUNCTION(BlueprintCallable)
 	void SwitchToScreen(EMenuScreen Screen);
+
+	UFUNCTION(BlueprintCallable)
+	void PlayLobbySound(USoundBase* LobbySound);
+	
+	UFUNCTION(BlueprintCallable)
+	void StopLobbySound();
+
+	UFUNCTION(Server,Reliable,BlueprintCallable)
+	void TravelTrainingRoom();
+	void TravelTrainingRoom_Implementation();
+
 };

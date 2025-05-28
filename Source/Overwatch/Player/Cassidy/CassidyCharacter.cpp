@@ -73,7 +73,7 @@ ACassidyCharacter::ACassidyCharacter()
 	// 궁극기 관련 설정
 	UltimateCharge = 0.0f;
 	MaxUltimateCharge = 100.0f;
-	UltimateChargePerSecond = 100.0f; // 초당 1% 충전
+	UltimateChargePerSecond = 1.0f; // 초당 1% 충전
 	UltimateChargePerHit = 5.0f; // 명중 시 5% 충전
 	bIsHighnoon = false;
 	bCanFireHighnoon = false;

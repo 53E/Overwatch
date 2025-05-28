@@ -10,22 +10,25 @@
 //DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnScreenChangedSignature,
 //    EMenuScreen, PreviousScreen, EMenuScreen, CurrentScreen);
 class UOutGameUI;
+class UAudioComponent;
+class USoundBase;
 
 UENUM(BlueprintType)
 enum class EMenuScreen : uint8
 {
-    MainMenu,    // ¸ÞÀÎ ¸Þ´º È­¸é (±âº»)
-    PlaySelect,  // °ÔÀÓ ¸ðµå ¼±ÅÃ È­¸é
-    HeroGallery, // ¿µ¿õ °¶·¯¸® È­¸é
-    Lootbox,     // Àü¸®Ç° »óÀÚ È­¸é
-    Settings,    // ¼³Á¤ È­¸é
-    SelectPlay,  //ÇÃ·¹ÀÌ Å¸ÀÔ ¼±ÅÃ
-    Training,     // ÈÆ·Ã¼±ÅÃ
-    TrainingGround //ÈÆ·ÃÀå ¼±ÅÃ
+    MainMenu,
+    PlaySelect,  
+    HeroGallery, 
+    Lootbox,    
+    Settings,    
+    SelectPlay,
+    Training,
+    LoadingTrainingRoom,     
+    SelectHero 
 
 };
 /**
- ¸¶½ºÅÍ ¾Æ·¡ À§Á¬µéÀº ¸ðµÎ OutGameUI¸¦ »ó¼Ó¹Þ¾Æ ÀÌ ¸¶½ºÅÍÅ¬·¡½ºÀÇ ·¹ÆÛ·±½º¸¦ °¡Áö°í ÀÖÀ½!
+ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Æ·ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ OutGameUIï¿½ï¿½ ï¿½ï¿½Ó¹Þ¾ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Û·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½!
  */
 UCLASS()
 class OVERWATCH_API UMainMenuMaster : public UUserWidget
@@ -33,37 +36,47 @@ class OVERWATCH_API UMainMenuMaster : public UUserWidget
 	GENERATED_BODY()
 	
     public:
-    /** Æ¯Á¤ ¸Þ´º È­¸éÀ¸·Î ÀüÈ¯ÇÕ´Ï´Ù */
+    /** Æ¯ï¿½ï¿½ ï¿½Þ´ï¿½ È­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½È¯ï¿½Õ´Ï´ï¿½ */
     UFUNCTION(BlueprintCallable, Category = "Menu|Navigation")
     void SwitchToScreen(EMenuScreen Screen);
     
     virtual void NativeConstruct() override;
+
+    void PlayLobbySound(USoundBase* LobbySound);
+    void StopLobbySound();
 protected:
-    /** È­¸é ÀüÈ¯ ÀÌº¥Æ® - ¾Ö´Ï¸ÞÀÌ¼Ç ¹× Ãß°¡ ·ÎÁ÷¿¡ »ç¿ë */
+    /** È­ï¿½ï¿½ ï¿½ï¿½È¯ ï¿½Ìºï¿½Æ® - ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ */
     UFUNCTION(BlueprintNativeEvent, Category = "Menu|Events")
     void OnScreenChanged(EMenuScreen NewScreen);
     virtual void OnScreenChanged_Implementation(EMenuScreen NewScreen);
     
 
     
-    /** ÇöÀç È°¼ºÈ­µÈ ¸Þ´º È­¸é */
+    /** ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­ï¿½ï¿½ ï¿½Þ´ï¿½ È­ï¿½ï¿½ */
     UPROPERTY(BlueprintReadOnly, Category = "Menu|State")
     EMenuScreen CurrentScreen;
     
-    /** ÀÌÀü¿¡ È°¼ºÈ­µÈ ¸Þ´º È­¸é */
+    /** ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È°ï¿½ï¿½È­ï¿½ï¿½ ï¿½Þ´ï¿½ È­ï¿½ï¿½ */
     UPROPERTY(BlueprintReadOnly, Category = "Menu|State")
     EMenuScreen PreviousScreen;
 
 private:
-    /** À§Á¬ ½ºÀ§Ã³ ÄÄÆ÷³ÍÆ® - È­¸é ÀüÈ¯À» °ü¸®ÇÔ */
+    /** ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ã³ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ® - È­ï¿½ï¿½ ï¿½ï¿½È¯ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
     UPROPERTY(meta = (BindWidget), BlueprintReadOnly, Category = "Menu|Components", meta = (AllowPrivateAccess = "true"))
     UWidgetSwitcher* ContentSwitcher;
     
-    //BP¿¡¼­ ¹Ì¸® ¼³Á¤
+    //BPï¿½ï¿½ï¿½ï¿½ ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½ï¿½
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Menu|Configuration", meta = (AllowPrivateAccess = "true"))
     TMap<EMenuScreen, TSubclassOf<UOutGameUI>> ScreenWidgetClasses;
     
-    // À§Á¬ Àç»ç¿ë 
+    // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 
     UPROPERTY()
     TMap<EMenuScreen, UOutGameUI*> ScreenWidgets;
+
+public:
+    //UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Sound")
+    //USoundBase* LobbySound;
+
+    UAudioComponent* LobbyAudioComp;
+    
 };
